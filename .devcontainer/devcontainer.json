@@ -3,41 +3,12 @@
 	"build": {
 		"dockerfile": "Dockerfile"
 	},
-	"runArgs": [
-		"--name=${localWorkspaceFolderBasename}"
-	],
 	"postCreateCommand": "make install",
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"ms-vscode.cpptools",
-				"ms-vscode.makefile-tools"
-			],
-			"settings": {
-				"tasks": {
-					"version": "2.0.0",
-					"tasks": [
-						{
-							"label": "Build",
-							"type": "shell",
-							"command": "make"
-						},
-						{
-							"label": "Clean",
-							"type": "shell",
-							"command": "make clean"
-						},
-						{
-							"label": "Re-Build",
-							"dependsOrder": "sequence",
-							"dependsOn": [
-								"Clean",
-								"Build"
-							]
-						}
-					]
-				}
-			}
+				"ms-vscode.cpptools"
+			]
 		}
 	}
 }

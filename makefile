@@ -61,10 +61,6 @@ ifeq ($(DEBUG), UART1)
 	CFLAGS += -DTRACE_DEVICE_TEMPERATURE=1
 endif
 
-# Disable Link Time Optimisation (LTO)
-# The GCC toolchain used completes the build with an error when LTO is enabled.
-DISABLE_LTO = 1
-
 # BDB features – Enable as required
 BDB_SUPPORT_NWK_STEERING ?= 1
 
@@ -88,7 +84,7 @@ SDK_BASE_DIR ?= $(abspath ./sdk/$(JENNIC_SDK))
 UTIL_SRC_DIR = $(COMPONENTS_BASE_DIR)/ZigbeeCommon/Source
 HW_SRC_DIR = $(COMPONENTS_BASE_DIR)/HardwareAPI/Source
 TOOL_COMMON_BASE_DIR ?= $(abspath ./tools)
-TOOLCHAIN_PATH ?= ba-toolchain
+TOOLCHAIN_PATH ?= ba2-toolchain
 TOOLCHAIN_BASE_DIR = $(TOOL_COMMON_BASE_DIR)/$(TOOLCHAIN_PATH)
 
 # Application Source files
@@ -192,7 +188,7 @@ clean:
 	rm -f $(APP_SRC_DIR)/pdum_gen.* $(APP_SRC_DIR)/zps_gen.* $(APP_SRC_DIR)/pdum_apdu.S
 	@echo
 
-install: pre-install install-sdk install-toolchain
+install: install-sdk install-toolchain
 	$(info SDK and Toolchain installed.)
 	@echo
 
@@ -203,9 +199,9 @@ ifeq ($(wildcard $(SDK_BASE_DIR)/Stack), )
 ifneq ($(shell git submodule status $(SDK_BASE_DIR) 2> /dev/null), )
 	git submodule update --init
 else
-	wget https://github.com/igorlistopad/JN-SW-4170/archive/refs/heads/v1840.tar.gz \
-	-O $(SDK_BASE_DIR)/../JN-SW-4170.tar.gz
-	tar -xvf $(SDK_BASE_DIR)/../JN-SW-4170.tar.gz --strip-components=1 -C $(SDK_BASE_DIR)
+	curl -fL --retry 3 "https://github.com/igorlistopad/JN-SW-4170/archive/refs/heads/v1840.tar.gz" \
+		-o "$(SDK_BASE_DIR)/../JN-SW-4170.tar.gz"
+	tar -xzf $(SDK_BASE_DIR)/../JN-SW-4170.tar.gz --strip-components=1 -C $(SDK_BASE_DIR)
 	rm $(SDK_BASE_DIR)/../JN-SW-4170.tar.gz
 endif
 endif
@@ -217,29 +213,27 @@ install-toolchain: $(TOOLCHAIN_BASE_DIR)/bin
 
 $(TOOLCHAIN_BASE_DIR)/bin: $(TOOLCHAIN_BASE_DIR)
 ifeq ($(wildcard $(TOOLCHAIN_BASE_DIR)/bin), )
-ifeq ($(shell uname -m), aarch64)
-	wget https://github.com/openlumi/BA2-toolchain/releases/download/20201219/ba-toolchain-aarch64-20220821.tar.bz2 \
-	-O $(TOOL_COMMON_BASE_DIR)/ba-toolchain.tar.bz2
-else
-	wget https://github.com/openlumi/BA2-toolchain/releases/download/20201219/ba-toolchain-20201219.tar.bz2 \
-	-O $(TOOL_COMMON_BASE_DIR)/ba-toolchain.tar.bz2
-endif
-	tar -xvjf $(TOOL_COMMON_BASE_DIR)/ba-toolchain.tar.bz2 --strip-components=1 -C $(TOOLCHAIN_BASE_DIR)
-	rm $(TOOL_COMMON_BASE_DIR)/ba-toolchain.tar.bz2
+	@case "$$(uname -s)-$$(uname -m)" in \
+		Linux-x86_64|Linux-amd64) platform=linux-amd64 ;; \
+		Linux-aarch64|Linux-arm64) platform=linux-arm64 ;; \
+		Darwin-x86_64) platform=macos-amd64 ;; \
+		Darwin-arm64) platform=macos-arm64 ;; \
+		MSYS*-x86_64|MINGW*-x86_64|CYGWIN*-x86_64) platform=windows-amd64 ;; \
+		*) printf '%s\n' \
+			"Unsupported toolchain platform" \
+			"Try using a Linux Dev Container in Visual Studio Code" >&2; exit 1 ;; \
+	esac; \
+	curl -fL --retry 3 "https://github.com/igorlistopad/BA2-toolchain/releases/download/2026.9.12/ba2-toolchain-$$platform.tar.gz" \
+		-o "$(TOOL_COMMON_BASE_DIR)/ba2-toolchain.tar.gz"
+	tar -xzf "$(TOOL_COMMON_BASE_DIR)/ba2-toolchain.tar.gz" --strip-components=1 -C "$(TOOLCHAIN_BASE_DIR)"
+	rm "$(TOOL_COMMON_BASE_DIR)/ba2-toolchain.tar.gz"
 endif
 
 $(TOOLCHAIN_BASE_DIR):
 	mkdir -p $(TOOLCHAIN_BASE_DIR)
 
-pre-install:
-ifneq ($(shell uname -s), Linux)
-	$(warning Use "Dev Container" in Visual Studio Code!)
-	$(warning https://code.visualstudio.com/docs/devcontainers/tutorial)
-	$(error Unsupported operating system)
-endif
-
 -include $(APPDEPS)
 
 .NOTPARALLEL:
-.PHONY: all clean install pre-build pre-install install-sdk install-toolchain main-build
+.PHONY: all clean install pre-build install-sdk install-toolchain main-build
 .DELETE_ON_ERROR:

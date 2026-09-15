@@ -38,6 +38,17 @@ PRIVATE void APP_ZCL_vDeviceSpecific_Init(void);
 
 PUBLIC APP_tsLumiRouter sLumiRouter;
 
+/* Ensure Basic cluster strings fit the tsCLD_Basic buffers (JN-SW-4170, Basic.h). */
+#define APP_CHECK_BASIC_STRING(name, length, field) \
+    typedef char name[((length) <= sizeof(sLumiRouter.sBasicServerCluster.field)) ? 1 : -1]
+
+APP_CHECK_BASIC_STRING(APP_tManufacturerNameSizeCheck, CLD_BAS_MANUF_NAME_SIZE, au8ManufacturerName);
+APP_CHECK_BASIC_STRING(APP_tModelIdentifierSizeCheck, CLD_BAS_MODEL_ID_SIZE, au8ModelIdentifier);
+APP_CHECK_BASIC_STRING(APP_tBuildDateSizeCheck, CLD_BAS_DATE_SIZE, au8DateCode);
+APP_CHECK_BASIC_STRING(APP_tVersionSizeCheck, CLD_BAS_SW_BUILD_SIZE, au8SWBuildID);
+
+#undef APP_CHECK_BASIC_STRING
+
 /**
  * @brief Initialises ZCL, registers the application endpoint, and starts the tick timer
  */

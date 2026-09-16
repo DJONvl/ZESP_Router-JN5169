@@ -4,7 +4,6 @@
  */
 
 #include <jendefs.h>
-#include <string.h>
 
 /* Generated */
 #include "zps_gen.h"
@@ -38,7 +37,7 @@ typedef struct {
 PRIVATE uint8 APP_u8GetRecordIndex(uint16 u16ClusterID, uint16 u16AttributeEnum);
 PRIVATE void APP_vPrintReportRecord(APP_tsReports *psReport);
 
-/* One report: Device Temperature Configuration */
+/* Saved reporting configurations */
 PRIVATE APP_tsReports asSavedReports[NUMBER_OF_REPORTS];
 
 /* Define the default reports */
@@ -107,8 +106,6 @@ PUBLIC void APP_vLoadDefaultConfigForReportable(void)
 
     DBG_vPrintf(TRACE_REPORT, "Reporting: Load default configuration\n");
 
-    memset(asSavedReports, 0, sizeof(asSavedReports));
-
     for (i = 0; i < NUMBER_OF_REPORTS; i++) {
         asSavedReports[i] = asDefaultReports[i];
         APP_vPrintReportRecord(&asSavedReports[i]);
@@ -125,8 +122,12 @@ PUBLIC void
 APP_vSaveReportableRecord(uint16 u16ClusterID,
                           tsZCL_AttributeReportingConfigurationRecord *psAttributeReportingConfigurationRecord)
 {
-    uint8 u8Index = APP_u8GetRecordIndex(u16ClusterID, psAttributeReportingConfigurationRecord->u16AttributeEnum);
+    /* Save only outgoing report configurations (direction 0). */
+    if (psAttributeReportingConfigurationRecord->u8DirectionIsReceived != 0) {
+        return;
+    }
 
+    uint8 u8Index = APP_u8GetRecordIndex(u16ClusterID, psAttributeReportingConfigurationRecord->u16AttributeEnum);
     if (u8Index == APP_REPORT_INDEX_INVALID) {
         return;
     }
@@ -135,9 +136,8 @@ APP_vSaveReportableRecord(uint16 u16ClusterID,
 
     /* Update the reportable record with new configuration */
     asSavedReports[u8Index].u16ClusterID = u16ClusterID;
-    memcpy(&(asSavedReports[u8Index].sAttributeReportingConfigurationRecord),
-           psAttributeReportingConfigurationRecord,
-           sizeof(tsZCL_AttributeReportingConfigurationRecord));
+    asSavedReports[u8Index].sAttributeReportingConfigurationRecord =
+        *psAttributeReportingConfigurationRecord;
 
     APP_vPrintReportRecord(&asSavedReports[u8Index]);
 
@@ -167,9 +167,8 @@ APP_vRestoreDefaultRecord(uint8 u8EndPointID,
 
     DBG_vPrintf(TRACE_REPORT, "Reporting: Restore default record index=%d\n", u8Index);
 
-    memcpy(&(asSavedReports[u8Index].sAttributeReportingConfigurationRecord),
-           &(asDefaultReports[u8Index].sAttributeReportingConfigurationRecord),
-           sizeof(tsZCL_AttributeReportingConfigurationRecord));
+    asSavedReports[u8Index].sAttributeReportingConfigurationRecord =
+        asDefaultReports[u8Index].sAttributeReportingConfigurationRecord;
 
     APP_vPrintReportRecord(&asSavedReports[u8Index]);
 

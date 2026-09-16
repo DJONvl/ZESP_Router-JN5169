@@ -14,7 +14,6 @@
 #include "app_main.h"
 #include "app_reporting.h"
 #include "app_router_node.h"
-#include "app_serial_commands.h"
 #include "app_zcl_task.h"
 
 /* SDK JN-SW-4170 */
@@ -110,8 +109,6 @@ PUBLIC void APP_vInitialiseRouter(void)
 
     APP_vPrintAPSTable();
 #endif
-
-    APP_vSendSerialMessage("Router started..");
 }
 
 /**

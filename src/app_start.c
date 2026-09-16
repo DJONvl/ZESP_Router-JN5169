@@ -39,9 +39,9 @@ extern void *_stack_low_water_mark;
  */
 PUBLIC void vAppMain(void)
 {
-#ifdef UART_DEBUGGING
-    /* Initialise the debug diagnostics module to use UART1 at 115K Baud */
-    DBG_vUartInit(DBG_E_UART_1, DBG_E_UART_BAUD_RATE_115200);
+#ifdef DEBUG_ENABLED
+    /* Initialise the selected debug UART at 115200 baud. */
+    DBG_vUartInit(DEBUG_UART_PORT, DBG_E_UART_BAUD_RATE_115200);
 #endif
 
     DBG_vPrintf(TRACE_APP, "*** Initialising Lumi Router ***\n");

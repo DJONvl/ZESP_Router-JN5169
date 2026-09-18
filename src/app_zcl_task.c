@@ -141,6 +141,21 @@ PRIVATE void APP_ZCL_cbEndpointCallback(tsZCL_CallBackEvent *psEvent)
         /* Use the current attribute values; do not refresh them before the read. */
         break;
 
+    case E_ZCL_CBET_WRITE_INDIVIDUAL_ATTRIBUTE:
+        DBG_vPrintf(TRACE_ZCL,
+                    "ZCL Endpoint Callback: Write attribute cluster=%04x attribute=%04x status=%02x\n",
+                    psEvent->psClusterInstance->psClusterDefinition->u16ClusterEnum,
+                    psEvent->uMessage.sIndividualAttributeResponse.u16AttributeEnum,
+                    psEvent->uMessage.sIndividualAttributeResponse.eAttributeStatus);
+        break;
+
+    case E_ZCL_CBET_WRITE_ATTRIBUTES:
+        DBG_vPrintf(TRACE_ZCL,
+                    "ZCL Endpoint Callback: Write attributes request processed cluster=%04x status=%02x\n",
+                    psEvent->psClusterInstance->psClusterDefinition->u16ClusterEnum,
+                    psEvent->eZCL_Status);
+        break;
+
     case E_ZCL_CBET_DEFAULT_RESPONSE:
         DBG_vPrintf(TRACE_ZCL,
                     "ZCL Endpoint Callback: Default response command=%02x status=%02x\n",

@@ -17,8 +17,10 @@
 /* Set this True to disable non-error default responses from clusters */
 #define ZCL_DISABLE_DEFAULT_RESPONSES (TRUE)
 
-/* Which custom commands need to be supported */
+/* ZCL global attribute commands supported by the server */
 #define ZCL_ATTRIBUTE_READ_SERVER_SUPPORTED
+#define ZCL_ATTRIBUTE_WRITE_SERVER_SUPPORTED
+#define ZCL_ATTRIBUTE_DISCOVERY_SERVER_SUPPORTED
 
 /* Configuring Attribute Reporting */
 #define ZCL_ATTRIBUTE_REPORTING_SERVER_SUPPORTED

@@ -4,6 +4,7 @@
  */
 
 #include <jendefs.h>
+#include <string.h>
 
 /* Generated */
 #include "zps_gen.h"
@@ -23,17 +24,24 @@
 #define TRACE_REPORT FALSE
 #endif
 
+#define APP_REPORTS_MAGIC        0x4C525201UL /* LR + R (Reports) + revision 1 */
 #define APP_REPORT_INDEX_INVALID 0xFF
 
-#define DEVICE_TEMPERATURE_MINIMUM_REPORTABLE_CHANGE       0x01
-#define DEVICE_TEMPERATURE_MIN_REPORT_INTERVAL_SECONDS     300
-#define DEVICE_TEMPERATURE_MAX_REPORT_INTERVAL_SECONDS     3600
+#define DEVICE_TEMPERATURE_MINIMUM_REPORTABLE_CHANGE   0x01
+#define DEVICE_TEMPERATURE_MIN_REPORT_INTERVAL_SECONDS 300
+#define DEVICE_TEMPERATURE_MAX_REPORT_INTERVAL_SECONDS 3600
 
 typedef struct {
     uint16 u16ClusterID;
     tsZCL_AttributeReportingConfigurationRecord sAttributeReportingConfigurationRecord;
 } APP_tsReports;
 
+typedef struct {
+    uint32 u32Magic;
+    APP_tsReports asReports[NUMBER_OF_REPORTS];
+} APP_tsReportsRecord;
+
+PRIVATE void APP_vSaveReportsRecord(void);
 PRIVATE uint8 APP_u8GetRecordIndex(uint16 u16ClusterID, uint16 u16AttributeEnum);
 PRIVATE void APP_vPrintReportRecord(APP_tsReports *psReport);
 
@@ -57,24 +65,46 @@ PRIVATE APP_tsReports asDefaultReports[NUMBER_OF_REPORTS] = {
 };
 
 /**
- * @brief Loads the reporting information from the EEPROM/PDM
+ * @brief Restores the reporting configuration from PDM if the record is valid.
  */
-PUBLIC PDM_teStatus APP_eRestoreReports(void)
+PUBLIC bool_t APP_bRestoreReports(void)
 {
-    /* Restore any report data that is previously saved to flash */
-    uint16 u16ByteRead;
-    PDM_teStatus eStatusReportReload =
-        PDM_eReadDataFromRecord(PDM_ID_APP_REPORTS, asSavedReports, sizeof(asSavedReports), &u16ByteRead);
+    APP_tsReportsRecord sRecord;
+    uint16 u16RecordLength;
+    uint16 u16BytesRead = 0;
 
-    DBG_vPrintf(TRACE_REPORT, "Reporting: Restore status=%d\n", eStatusReportReload);
+    /* JN516x PDM reads the entire record without enforcing the buffer size.
+     * Check the stored length before reading to prevent a buffer overflow. */
+    if (!PDM_bDoesDataExist(PDM_ID_APP_REPORTS, &u16RecordLength)) {
+        DBG_vPrintf(TRACE_REPORT, "PDM: Reports record not found, using defaults\n");
+        return FALSE;
+    }
 
-    return eStatusReportReload;
+    if (u16RecordLength != sizeof(sRecord)) {
+        DBG_vPrintf(TRACE_REPORT, "PDM: Unexpected reports record length=%u\n", u16RecordLength);
+        return FALSE;
+    }
+
+    PDM_teStatus eStatus = PDM_eReadDataFromRecord(PDM_ID_APP_REPORTS, &sRecord, sizeof(sRecord), &u16BytesRead);
+    if ((eStatus != PDM_E_STATUS_OK) || (u16BytesRead != sizeof(sRecord))) {
+        DBG_vPrintf(TRACE_REPORT, "PDM: Reports read failed, status=%d length=%u\n", eStatus, u16BytesRead);
+        return FALSE;
+    }
+
+    if (sRecord.u32Magic != APP_REPORTS_MAGIC) {
+        DBG_vPrintf(TRACE_REPORT, "PDM: Invalid reports record magic=%08lx\n", (unsigned long)sRecord.u32Magic);
+        return FALSE;
+    }
+
+    memcpy(asSavedReports, sRecord.asReports, sizeof(asSavedReports));
+
+    return TRUE;
 }
 
 /**
- * @brief Makes the attributes reportable
+ * @brief Applies the reporting configuration to ZCL.
  */
-PUBLIC void APP_vMakeSupportedAttributesReportable(void)
+PUBLIC void APP_vApplyReportingConfig(void)
 {
     uint8 i;
     uint16 u16AttributeEnum;
@@ -100,7 +130,7 @@ PUBLIC void APP_vMakeSupportedAttributesReportable(void)
 /**
  * @brief Loads a default configuration
  */
-PUBLIC void APP_vLoadDefaultConfigForReportable(void)
+PUBLIC void APP_vLoadDefaultReports(void)
 {
     uint8 i;
 
@@ -111,8 +141,7 @@ PUBLIC void APP_vLoadDefaultConfigForReportable(void)
         APP_vPrintReportRecord(&asSavedReports[i]);
     }
 
-    /* Save these records */
-    PDM_eSaveRecordData(PDM_ID_APP_REPORTS, asSavedReports, sizeof(asSavedReports));
+    APP_vSaveReportsRecord();
 }
 
 /**
@@ -136,13 +165,9 @@ APP_vSaveReportableRecord(uint16 u16ClusterID,
 
     /* Update the reportable record with new configuration */
     asSavedReports[u8Index].u16ClusterID = u16ClusterID;
-    asSavedReports[u8Index].sAttributeReportingConfigurationRecord =
-        *psAttributeReportingConfigurationRecord;
-
+    asSavedReports[u8Index].sAttributeReportingConfigurationRecord = *psAttributeReportingConfigurationRecord;
     APP_vPrintReportRecord(&asSavedReports[u8Index]);
-
-    /* Save these records */
-    PDM_eSaveRecordData(PDM_ID_APP_REPORTS, asSavedReports, sizeof(asSavedReports));
+    APP_vSaveReportsRecord();
 }
 
 /**
@@ -154,26 +179,40 @@ APP_vRestoreDefaultRecord(uint8 u8EndPointID,
                           tsZCL_AttributeReportingConfigurationRecord *psAttributeReportingConfigurationRecord)
 {
     uint8 u8Index = APP_u8GetRecordIndex(u16ClusterID, psAttributeReportingConfigurationRecord->u16AttributeEnum);
-
     if (u8Index == APP_REPORT_INDEX_INVALID) {
         return;
     }
 
-    eZCL_CreateLocalReport(u8EndPointID,
-                           u16ClusterID,
-                           0,
-                           TRUE,
-                           &(asDefaultReports[u8Index].sAttributeReportingConfigurationRecord));
+    teZCL_Status eStatus = eZCL_CreateLocalReport(u8EndPointID,
+                                                  u16ClusterID,
+                                                  0,
+                                                  TRUE,
+                                                  &asDefaultReports[u8Index].sAttributeReportingConfigurationRecord);
+    if (eStatus != E_ZCL_SUCCESS) {
+        DBG_vPrintf(TRACE_REPORT, "Reporting: Failed to restore default record index=%d status=%d\n", u8Index, eStatus);
+        return;
+    }
 
     DBG_vPrintf(TRACE_REPORT, "Reporting: Restore default record index=%d\n", u8Index);
 
-    asSavedReports[u8Index].sAttributeReportingConfigurationRecord =
-        asDefaultReports[u8Index].sAttributeReportingConfigurationRecord;
-
+    asSavedReports[u8Index] = asDefaultReports[u8Index];
     APP_vPrintReportRecord(&asSavedReports[u8Index]);
+    APP_vSaveReportsRecord();
+}
 
-    /* Save these records */
-    PDM_eSaveRecordData(PDM_ID_APP_REPORTS, asSavedReports, sizeof(asSavedReports));
+/**
+ * @brief Saves the reporting configuration to PDM.
+ */
+PRIVATE void APP_vSaveReportsRecord(void)
+{
+    APP_tsReportsRecord sRecord = {.u32Magic = APP_REPORTS_MAGIC};
+
+    memcpy(sRecord.asReports, asSavedReports, sizeof(asSavedReports));
+
+    PDM_teStatus eStatus = PDM_eSaveRecordData(PDM_ID_APP_REPORTS, &sRecord, sizeof(sRecord));
+    if (eStatus != PDM_E_STATUS_OK) {
+        DBG_vPrintf(TRACE_REPORT, "PDM: Failed to save reports, status=%d\n", eStatus);
+    }
 }
 
 /**

@@ -9,12 +9,11 @@
 #include <jendefs.h>
 
 /* SDK JN-SW-4170 */
-#include "PDM.h"
 #include "zcl.h"
 
-PUBLIC PDM_teStatus APP_eRestoreReports(void);
-PUBLIC void APP_vMakeSupportedAttributesReportable(void);
-PUBLIC void APP_vLoadDefaultConfigForReportable(void);
+PUBLIC bool_t APP_bRestoreReports(void);
+PUBLIC void APP_vApplyReportingConfig(void);
+PUBLIC void APP_vLoadDefaultReports(void);
 PUBLIC void
 APP_vSaveReportableRecord(uint16 u16ClusterID,
                           tsZCL_AttributeReportingConfigurationRecord *psAttributeReportingConfigurationRecord);

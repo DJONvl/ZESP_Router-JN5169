@@ -6,7 +6,7 @@
 #ifndef PDM_IDS_H
 #define PDM_IDS_H
 
-#define PDM_ID_APP_ROUTER  0x0001U
-#define PDM_ID_APP_REPORTS 0x000AU
+#define PDM_ID_APP_NODE_STATE   0x0001U
+#define PDM_ID_APP_REPORTS      0x0002U
 
 #endif /* PDM_IDS_H */

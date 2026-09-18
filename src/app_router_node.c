@@ -33,12 +33,20 @@
 #define TRACE_APP FALSE
 #endif
 
+#define APP_NODE_STATE_MAGIC 0x4C524E01UL /* LR + N (NodeState) + revision 1 */
+
 typedef enum {
-    E_STARTUP,
-    E_RUNNING
+    E_NODE_NOT_JOINED,
+    E_NODE_JOINED
 } APP_teNodeState;
 
+typedef struct {
+    uint32 u32Magic;
+    APP_teNodeState eNodeState;
+} APP_tsNodeStateRecord;
+
 PRIVATE void APP_vBdbInit(void);
+PRIVATE APP_teNodeState APP_eLoadNodeState(void);
 PRIVATE void APP_vSetNodeState(APP_teNodeState eNewState);
 PRIVATE void APP_vHandleAfEvents(BDB_tsZpsAfEvent *psZpsAfEvent);
 PRIVATE void APP_vHandleZdoEvents(BDB_tsZpsAfEvent *psZpsAfEvent);
@@ -54,11 +62,8 @@ PRIVATE APP_teNodeState eNodeState;
  */
 PUBLIC void APP_vInitialiseRouter(void)
 {
-    uint16 u16ByteRead;
-
-    /* TODO: Implement validated PDM storage for the application node state. */
-    eNodeState = E_STARTUP;
-    PDM_eReadDataFromRecord(PDM_ID_APP_ROUTER, &eNodeState, sizeof(APP_teNodeState), &u16ByteRead);
+    /* Restore node state or use the default. */
+    eNodeState = APP_eLoadNodeState();
 
     /* Initialise ZCL. */
     APP_ZCL_vInitialise();
@@ -88,13 +93,12 @@ PUBLIC void APP_vInitialiseRouter(void)
     APP_vDeviceTemperatureInit();
 
     /* Restore reporting configuration or load defaults. */
-    PDM_teStatus eStatusReportReload = APP_eRestoreReports();
-    if (eStatusReportReload != PDM_E_STATUS_OK) {
-        APP_vLoadDefaultConfigForReportable();
+    if (!APP_bRestoreReports()) {
+        APP_vLoadDefaultReports();
     }
 
     /* Apply the restored or default reporting configuration. */
-    APP_vMakeSupportedAttributesReportable();
+    APP_vApplyReportingConfig();
 
     DBG_vPrintf(TRACE_APP,
                 "APP: Router startup state=%d, BDB on network=%d\n",
@@ -124,7 +128,7 @@ PUBLIC void APP_vBdbCallback(BDB_tsBdbEvent *psBdbEvent)
 
     case BDB_EVENT_INIT_SUCCESS:
         DBG_vPrintf(TRACE_APP, "APP-BDB: Initialisation complete\n");
-        if (eNodeState == E_STARTUP) {
+        if (eNodeState == E_NODE_NOT_JOINED) {
             BDB_teStatus eStatus = BDB_eNsStartNwkSteering();
             DBG_vPrintf(TRACE_APP, "APP-BDB: Network steering start status=%d\n", eStatus);
         }
@@ -135,7 +139,7 @@ PUBLIC void APP_vBdbCallback(BDB_tsBdbEvent *psBdbEvent)
 
     case BDB_EVENT_NWK_STEERING_SUCCESS:
         DBG_vPrintf(TRACE_APP, "APP-BDB: Network steering succeeded\n");
-        APP_vSetNodeState(E_RUNNING);
+        APP_vSetNodeState(E_NODE_JOINED);
         break;
 
     case BDB_EVENT_NO_NETWORK:
@@ -178,9 +182,44 @@ PRIVATE void APP_vBdbInit(void)
 {
     BDB_tsInitArgs sInitArgs;
 
-    sBDB.sAttrib.bbdbNodeIsOnANetwork = (eNodeState == E_RUNNING) ? TRUE : FALSE;
+    sBDB.sAttrib.bbdbNodeIsOnANetwork = (eNodeState == E_NODE_JOINED);
     sInitArgs.hBdbEventsMsgQ = &APP_msgBdbEvents;
     BDB_vInit(&sInitArgs);
+}
+
+/**
+ * @brief Loads the node state from PDM or returns the default state.
+ */
+PRIVATE APP_teNodeState APP_eLoadNodeState(void)
+{
+    APP_tsNodeStateRecord sRecord;
+    uint16 u16RecordLength;
+    uint16 u16BytesRead = 0;
+
+    /* JN516x PDM reads the entire record without enforcing the buffer size.
+     * Check the stored length before reading to prevent a buffer overflow. */
+    if (!PDM_bDoesDataExist(PDM_ID_APP_NODE_STATE, &u16RecordLength)) {
+        DBG_vPrintf(TRACE_APP, "PDM: Node state record not found, using default\n");
+        return E_NODE_NOT_JOINED;
+    }
+
+    if (u16RecordLength != sizeof(sRecord)) {
+        DBG_vPrintf(TRACE_APP, "PDM: Unexpected node state record length=%u\n", u16RecordLength);
+        return E_NODE_NOT_JOINED;
+    }
+
+    PDM_teStatus eStatus = PDM_eReadDataFromRecord(PDM_ID_APP_NODE_STATE, &sRecord, sizeof(sRecord), &u16BytesRead);
+    if ((eStatus != PDM_E_STATUS_OK) || (u16BytesRead != sizeof(sRecord))) {
+        DBG_vPrintf(TRACE_APP, "PDM: Node state read failed, status=%d length=%u\n", eStatus, u16BytesRead);
+        return E_NODE_NOT_JOINED;
+    }
+
+    if (sRecord.u32Magic != APP_NODE_STATE_MAGIC) {
+        DBG_vPrintf(TRACE_APP, "PDM: Invalid node state record magic=%08lx\n", (unsigned long)sRecord.u32Magic);
+        return E_NODE_NOT_JOINED;
+    }
+
+    return sRecord.eNodeState;
 }
 
 /**
@@ -189,7 +228,10 @@ PRIVATE void APP_vBdbInit(void)
 PRIVATE void APP_vSetNodeState(APP_teNodeState eNewState)
 {
     eNodeState = eNewState;
-    PDM_teStatus eStatus = PDM_eSaveRecordData(PDM_ID_APP_ROUTER, &eNodeState, sizeof(APP_teNodeState));
+
+    APP_tsNodeStateRecord sRecord = {.u32Magic = APP_NODE_STATE_MAGIC, .eNodeState = eNodeState};
+
+    PDM_teStatus eStatus = PDM_eSaveRecordData(PDM_ID_APP_NODE_STATE, &sRecord, sizeof(sRecord));
     if (eStatus != PDM_E_STATUS_OK) {
         DBG_vPrintf(TRACE_APP, "PDM: Failed to save node state=%d status=%d\n", eNodeState, eStatus);
     }
@@ -401,8 +443,8 @@ PRIVATE void APP_vFactoryResetRecords(void)
     ZPS_vSetKeys();
 
     /* Persist factory-default application and stack state. */
-    APP_vSetNodeState(E_STARTUP);
-    APP_vLoadDefaultConfigForReportable();
+    APP_vSetNodeState(E_NODE_NOT_JOINED);
+    APP_vLoadDefaultReports();
     ZPS_vSaveAllZpsRecords();
 }
 

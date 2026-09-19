@@ -18,6 +18,7 @@
 
 /* SDK JN-SW-4170 */
 #include "Basic.h"
+#include "Identify.h"
 #include "DeviceTemperatureConfiguration.h"
 #include "ZTimer.h"
 #include "dbg.h"
@@ -32,6 +33,8 @@
 PRIVATE void APP_ZCL_vTick(void);
 PRIVATE void APP_ZCL_cbGeneralCallback(tsZCL_CallBackEvent *psEvent);
 PRIVATE void APP_ZCL_cbEndpointCallback(tsZCL_CallBackEvent *psEvent);
+PRIVATE void APP_ZCL_vHandleClusterCustomCommands(tsZCL_CallBackEvent *psEvent);
+PRIVATE void APP_ZCL_vHandleClusterUpdate(tsZCL_CallBackEvent *psEvent);
 PRIVATE void APP_ZCL_vHandleConfigureReportingRecord(tsZCL_CallBackEvent *psEvent);
 PRIVATE teZCL_Status APP_ZCL_eRegisterEndPoint(tfpZCL_ZCLCallBackFunction cbCallBack, APP_tsLumiRouter *psDeviceInfo);
 PRIVATE void APP_ZCL_vDeviceSpecific_Init(void);
@@ -141,6 +144,13 @@ PRIVATE void APP_ZCL_cbEndpointCallback(tsZCL_CallBackEvent *psEvent)
         /* Use the current attribute values; do not refresh them before the read. */
         break;
 
+    case E_ZCL_CBET_CHECK_ATTRIBUTE_RANGE:
+        DBG_vPrintf(TRACE_ZCL,
+                    "ZCL Endpoint Callback: Write range check cluster=%04x attribute=%04x\n",
+                    psEvent->psClusterInstance->psClusterDefinition->u16ClusterEnum,
+                    psEvent->uMessage.sIndividualAttributeResponse.u16AttributeEnum);
+        break;
+
     case E_ZCL_CBET_WRITE_INDIVIDUAL_ATTRIBUTE:
         DBG_vPrintf(TRACE_ZCL,
                     "ZCL Endpoint Callback: Write attribute cluster=%04x attribute=%04x status=%02x\n",
@@ -154,13 +164,6 @@ PRIVATE void APP_ZCL_cbEndpointCallback(tsZCL_CallBackEvent *psEvent)
                     "ZCL Endpoint Callback: Write attributes request processed cluster=%04x status=%02x\n",
                     psEvent->psClusterInstance->psClusterDefinition->u16ClusterEnum,
                     psEvent->eZCL_Status);
-        break;
-
-    case E_ZCL_CBET_DEFAULT_RESPONSE:
-        DBG_vPrintf(TRACE_ZCL,
-                    "ZCL Endpoint Callback: Default response command=%02x status=%02x\n",
-                    psEvent->uMessage.sDefaultResponse.u8CommandId,
-                    psEvent->uMessage.sDefaultResponse.u8StatusCode);
         break;
 
     case E_ZCL_CBET_REPORT_INDIVIDUAL_ATTRIBUTES_CONFIGURE:
@@ -177,6 +180,21 @@ PRIVATE void APP_ZCL_cbEndpointCallback(tsZCL_CallBackEvent *psEvent)
         /* Use the current attribute values; do not refresh them before reporting. */
         break;
 
+    case E_ZCL_CBET_CLUSTER_CUSTOM:
+        APP_ZCL_vHandleClusterCustomCommands(psEvent);
+        break;
+
+    case E_ZCL_CBET_CLUSTER_UPDATE:
+        APP_ZCL_vHandleClusterUpdate(psEvent);
+        break;
+
+    case E_ZCL_CBET_DEFAULT_RESPONSE:
+        DBG_vPrintf(TRACE_ZCL,
+                    "ZCL Endpoint Callback: Default response command=%02x status=%02x\n",
+                    psEvent->uMessage.sDefaultResponse.u8CommandId,
+                    psEvent->uMessage.sDefaultResponse.u8StatusCode);
+        break;
+
     case E_ZCL_CBET_ERROR:
         DBG_vPrintf(TRACE_ZCL,
                     "ZCL Endpoint Callback: Error status=%x endpoint=%d\n",
@@ -191,6 +209,42 @@ PRIVATE void APP_ZCL_cbEndpointCallback(tsZCL_CallBackEvent *psEvent)
     default:
         DBG_vPrintf(TRACE_ZCL, "ZCL Endpoint Callback: Unexpected event type=%d\n", psEvent->eEventType);
         break;
+    }
+}
+
+/**
+ * @brief Handles cluster-specific commands
+ */
+PRIVATE void APP_ZCL_vHandleClusterCustomCommands(tsZCL_CallBackEvent *psEvent)
+{
+    if (psEvent->uMessage.sClusterCustomMessage.u16ClusterId == GENERAL_CLUSTER_ID_IDENTIFY) {
+        tsCLD_IdentifyCallBackMessage *psMessage =
+            (tsCLD_IdentifyCallBackMessage *)psEvent->uMessage.sClusterCustomMessage.pvCustomData;
+
+        switch (psMessage->u8CommandId) {
+        case E_CLD_IDENTIFY_CMD_IDENTIFY:
+            /* This module has no physical indicator, so no indication is started or stopped. */
+            DBG_vPrintf(TRACE_ZCL,
+                        "ZCL Endpoint Callback: Identify time=%d\n",
+                        psMessage->uMessage.psIdentifyRequestPayload->u16IdentifyTime);
+            break;
+
+        case E_CLD_IDENTIFY_CMD_IDENTIFY_QUERY:
+            DBG_vPrintf(TRACE_ZCL, "ZCL Endpoint Callback: Identify query\n");
+            break;
+        }
+    }
+}
+
+/**
+ * @brief Handles cluster state updates
+ */
+PRIVATE void APP_ZCL_vHandleClusterUpdate(tsZCL_CallBackEvent *psEvent)
+{
+    if (psEvent->psClusterInstance->psClusterDefinition->u16ClusterEnum == GENERAL_CLUSTER_ID_IDENTIFY) {
+        DBG_vPrintf(TRACE_ZCL,
+                    "ZCL Endpoint Callback: Identify time remaining=%d\n",
+                    ((tsCLD_Identify *)psEvent->psClusterInstance->pvEndPointSharedStructPtr)->u16IdentifyTime);
     }
 }
 
@@ -256,6 +310,16 @@ PRIVATE teZCL_Status APP_ZCL_eRegisterEndPoint(tfpZCL_ZCLCallBackFunction cbCall
                                         &sCLD_Basic,
                                         &psDeviceInfo->sBasicServerCluster,
                                         &au8BasicClusterAttributeControlBits[0]);
+    if (eZCL_Status != E_ZCL_SUCCESS) {
+        return eZCL_Status;
+    }
+
+    eZCL_Status = eCLD_IdentifyCreateIdentify(&psDeviceInfo->sClusterInstance.sIdentifyServer,
+                                              TRUE,
+                                              &sCLD_Identify,
+                                              &psDeviceInfo->sIdentifyServerCluster,
+                                              &au8IdentifyAttributeControlBits[0],
+                                              &psDeviceInfo->sIdentifyServerCustomDataStructure);
     if (eZCL_Status != E_ZCL_SUCCESS) {
         return eZCL_Status;
     }

@@ -10,11 +10,13 @@
 
 /* SDK JN-SW-4170 */
 #include "Basic.h"
+#include "Identify.h"
 #include "DeviceTemperatureConfiguration.h"
 #include "zcl.h"
 
 typedef struct {
     tsZCL_ClusterInstance sBasicServer;
+    tsZCL_ClusterInstance sIdentifyServer;
     tsZCL_ClusterInstance sDeviceTemperatureConfigurationServer;
 
 } APP_tsLumiRouterClusterInstances __attribute__((aligned(4)));
@@ -27,6 +29,10 @@ typedef struct {
 
     /* Basic Cluster - Server */
     tsCLD_Basic sBasicServerCluster;
+
+    /* Identify Cluster - Server */
+    tsCLD_Identify sIdentifyServerCluster;
+    tsCLD_IdentifyCustomDataStructure sIdentifyServerCustomDataStructure;
 
     /* Device Temperature Configuration Cluster - Server */
     tsCLD_DeviceTemperatureConfiguration sDeviceTemperatureConfigurationServerCluster;

@@ -41,6 +41,8 @@ enum {
 /* Enable ZCL clusters and their client/server roles */
 #define CLD_BASIC
 #define BASIC_SERVER
+#define CLD_IDENTIFY
+#define IDENTIFY_SERVER
 #define CLD_DEVICE_TEMPERATURE_CONFIGURATION
 #define DEVICE_TEMPERATURE_CONFIGURATION_SERVER
 
@@ -50,7 +52,7 @@ enum {
 #define CLD_BAS_ATTR_DATE_CODE
 #define CLD_BAS_ATTR_SW_BUILD_ID
 
-#define BAS_MANUF_NAME_STRING "OPENLUMI"
+#define BAS_MANUF_NAME_STRING "OpenLumi"
 #define BAS_MODEL_ID_STRING   "openlumi.gw_router.jn5169"
 #define BAS_DATE_STRING       BUILD_DATE_STRING
 #define BAS_SW_BUILD_STRING   VERSION_STRING

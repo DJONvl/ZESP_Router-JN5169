@@ -12,6 +12,7 @@
 #include "ZQueue.h"
 
 extern PUBLIC uint8 u8TimerTick;
+extern PUBLIC uint8 u8TimerNetworkRetry;
 extern PUBLIC uint8 u8TimerDeviceTemperature;
 extern PUBLIC tszQueue APP_msgBdbEvents;
 extern PUBLIC tszQueue zps_TimeEvents;

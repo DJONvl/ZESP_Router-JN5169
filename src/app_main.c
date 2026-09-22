@@ -8,6 +8,7 @@
 /* Application */
 #include "app_device_temperature.h"
 #include "app_main.h"
+#include "app_router_node.h"
 #include "app_serial_commands.h"
 #include "app_zcl_task.h"
 
@@ -21,7 +22,7 @@
 #include "pwrm.h"
 #include "zps_apl_af.h"
 
-#define APP_ZTIMER_STORAGE   2
+#define APP_ZTIMER_STORAGE   3
 #define BDB_QUEUE_SIZE       3
 #define TIMER_QUEUE_SIZE     8
 #define MLME_QUEUE_SIZE      10
@@ -30,6 +31,7 @@
 #define RX_QUEUE_SIZE        64
 
 PUBLIC uint8 u8TimerTick;
+PUBLIC uint8 u8TimerNetworkRetry;
 PUBLIC uint8 u8TimerDeviceTemperature;
 PUBLIC tszQueue APP_msgBdbEvents;
 PUBLIC tszQueue APP_msgSerialRx;
@@ -93,6 +95,7 @@ PUBLIC void APP_vInitResources(void)
 
     /* Create Z timers */
     ZTIMER_eOpen(&u8TimerTick, APP_cbTimerZclTick, NULL, ZTIMER_FLAG_PREVENT_SLEEP);
+    ZTIMER_eOpen(&u8TimerNetworkRetry, APP_cbTimerNetworkRetry, NULL, ZTIMER_FLAG_PREVENT_SLEEP);
     ZTIMER_eOpen(&u8TimerDeviceTemperature, APP_cbTimerDeviceTemperatureUpdate, NULL, ZTIMER_FLAG_PREVENT_SLEEP);
 
     /* Create all the queues */

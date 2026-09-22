@@ -20,6 +20,7 @@
 #include "AppApi.h"
 #include "AppHardwareApi.h"
 #include "PDM.h"
+#include "ZTimer.h"
 #include "bdb_api.h"
 #include "dbg.h"
 #include "pdum_apl.h"
@@ -35,9 +36,13 @@
 
 #define APP_NODE_STATE_MAGIC 0x4C524E01UL /* LR + N (NodeState) + revision 1 */
 
+#define JOIN_RETRY_TIME   ZTIMER_TIME_SEC(15)
+#define REJOIN_RETRY_TIME ZTIMER_TIME_SEC(60)
+
 typedef enum {
     E_NODE_NOT_JOINED,
-    E_NODE_JOINED
+    E_NODE_JOINED,
+    E_NODE_REJOIN_REQUIRED
 } APP_teNodeState;
 
 typedef struct {
@@ -46,6 +51,8 @@ typedef struct {
 } APP_tsNodeStateRecord;
 
 PRIVATE void APP_vBdbInit(void);
+PRIVATE void APP_vStartNetworkSteering(void);
+PRIVATE void APP_vStartNetworkRejoin(void);
 PRIVATE APP_teNodeState APP_eLoadNodeState(void);
 PRIVATE void APP_vSetNodeState(APP_teNodeState eNewState);
 PRIVATE void APP_vHandleAfEvents(BDB_tsZpsAfEvent *psZpsAfEvent);
@@ -128,12 +135,19 @@ PUBLIC void APP_vBdbCallback(BDB_tsBdbEvent *psBdbEvent)
 
     case BDB_EVENT_INIT_SUCCESS:
         DBG_vPrintf(TRACE_APP, "APP-BDB: Initialisation complete\n");
-        if (eNodeState == E_NODE_NOT_JOINED) {
-            BDB_teStatus eStatus = BDB_eNsStartNwkSteering();
-            DBG_vPrintf(TRACE_APP, "APP-BDB: Network steering start status=%d\n", eStatus);
-        }
-        else {
-            DBG_vPrintf(TRACE_APP, "APP-BDB: Network state restored\n");
+
+        switch (eNodeState) {
+        case E_NODE_NOT_JOINED:
+            APP_vStartNetworkSteering();
+            break;
+
+        case E_NODE_JOINED:
+            DBG_vPrintf(TRACE_APP, "APP-BDB: Joined state restored\n");
+            break;
+
+        case E_NODE_REJOIN_REQUIRED:
+            APP_vStartNetworkRejoin();
+            break;
         }
         break;
 
@@ -143,8 +157,8 @@ PUBLIC void APP_vBdbCallback(BDB_tsBdbEvent *psBdbEvent)
         break;
 
     case BDB_EVENT_NO_NETWORK:
-        DBG_vPrintf(TRACE_APP, "APP-BDB: No suitable open network found\n");
-        /* TODO: Add the required application handling for this event. */
+        DBG_vPrintf(TRACE_APP, "APP-BDB: Network steering ended without joining\n");
+        ZTIMER_eStart(u8TimerNetworkRetry, JOIN_RETRY_TIME);
         break;
 
     case BDB_EVENT_NWK_JOIN_FAILURE:
@@ -152,25 +166,40 @@ PUBLIC void APP_vBdbCallback(BDB_tsBdbEvent *psBdbEvent)
         break;
 
     case BDB_EVENT_FAILURE_RECOVERY_FOR_REJOIN:
-        DBG_vPrintf(TRACE_APP, "APP-BDB: Rejoin failed, recovery started\n");
+        DBG_vPrintf(TRACE_APP, "APP-BDB: Rejoin failed; starting BDB rejoin cycles\n");
         break;
 
     case BDB_EVENT_REJOIN_SUCCESS:
         DBG_vPrintf(TRACE_APP, "APP-BDB: Rejoin succeeded\n");
+        APP_vSetNodeState(E_NODE_JOINED);
         break;
 
     case BDB_EVENT_REJOIN_FAILURE:
-        /*
-         * Not generated while apsUseInsecureJoin is enabled because BDB
-         * falls back to Network Steering after all rejoin attempts fail.
-         * If apsUseInsecureJoin is disabled, this terminal event requires
-         * an application recovery policy.
-         */
-        DBG_vPrintf(TRACE_APP, "APP-BDB: Rejoin attempts exhausted\n");
+        DBG_vPrintf(TRACE_APP, "APP-BDB: Rejoin failed; scheduling retry\n");
+        APP_vSetNodeState(E_NODE_REJOIN_REQUIRED);
+        ZTIMER_eStart(u8TimerNetworkRetry, REJOIN_RETRY_TIME);
         break;
 
     default:
         DBG_vPrintf(TRACE_APP, "APP-BDB: Unexpected event type=%d\n", psBdbEvent->eEventType);
+        break;
+    }
+}
+
+/**
+ * @brief Retries network steering or rejoin.
+ */
+PUBLIC void APP_cbTimerNetworkRetry(void *pvParam)
+{
+    (void)pvParam;
+
+    switch (eNodeState) {
+    case E_NODE_NOT_JOINED:
+        APP_vStartNetworkSteering();
+        break;
+
+    case E_NODE_REJOIN_REQUIRED:
+        APP_vStartNetworkRejoin();
         break;
     }
 }
@@ -182,9 +211,39 @@ PRIVATE void APP_vBdbInit(void)
 {
     BDB_tsInitArgs sInitArgs;
 
-    sBDB.sAttrib.bbdbNodeIsOnANetwork = (eNodeState == E_NODE_JOINED);
+    sBDB.sAttrib.bbdbNodeIsOnANetwork = (eNodeState != E_NODE_NOT_JOINED);
     sInitArgs.hBdbEventsMsgQ = &APP_msgBdbEvents;
     BDB_vInit(&sInitArgs);
+}
+
+/**
+ * @brief Starts network steering and schedules a retry if the start fails.
+ */
+PRIVATE void APP_vStartNetworkSteering(void)
+{
+    BDB_teStatus eStatus = BDB_eNsStartNwkSteering();
+    if (eStatus != BDB_E_SUCCESS) {
+        DBG_vPrintf(TRACE_APP, "APP: Failed to start network steering, status=%d\n", eStatus);
+        ZTIMER_eStart(u8TimerNetworkRetry, JOIN_RETRY_TIME);
+    }
+    else {
+        DBG_vPrintf(TRACE_APP, "APP: Network steering started\n");
+    }
+}
+
+/**
+ * @brief Starts rejoin and schedules a retry if the start fails.
+ */
+PRIVATE void APP_vStartNetworkRejoin(void)
+{
+    ZPS_teStatus eStatus = ZPS_eAplZdoRejoinNetwork(TRUE);
+    if (eStatus != ZPS_E_SUCCESS) {
+        DBG_vPrintf(TRACE_APP, "APP: Failed to start rejoin, status=%02x\n", eStatus);
+        ZTIMER_eStart(u8TimerNetworkRetry, REJOIN_RETRY_TIME);
+    }
+    else {
+        DBG_vPrintf(TRACE_APP, "APP: Rejoin started\n");
+    }
 }
 
 /**
@@ -223,10 +282,14 @@ PRIVATE APP_teNodeState APP_eLoadNodeState(void)
 }
 
 /**
- * @brief Updates the application node state and saves it to PDM.
+ * @brief Updates and persists the application node state when it changes.
  */
 PRIVATE void APP_vSetNodeState(APP_teNodeState eNewState)
 {
+    if (eNodeState == eNewState) {
+        return;
+    }
+
     eNodeState = eNewState;
 
     APP_tsNodeStateRecord sRecord = {.u32Magic = APP_NODE_STATE_MAGIC, .eNodeState = eNodeState};
@@ -321,13 +384,17 @@ PRIVATE void APP_vHandleZdoEvents(BDB_tsZpsAfEvent *psZpsAfEvent)
                     psAfEvent->uEvent.sNwkLeaveIndicationEvent.u64ExtAddr,
                     psAfEvent->uEvent.sNwkLeaveIndicationEvent.u8Rejoin);
 
-        if ((psAfEvent->uEvent.sNwkLeaveIndicationEvent.u64ExtAddr == 0ULL) &&
-            (psAfEvent->uEvent.sNwkLeaveIndicationEvent.u8Rejoin == 0U)) {
-            /* The device was requested to leave the network without rejoining. */
-            DBG_vPrintf(TRACE_APP, "APP-ZDO: Local device leaving network without rejoin\n");
+        if (psAfEvent->uEvent.sNwkLeaveIndicationEvent.u64ExtAddr == 0ULL) {
+            if (psAfEvent->uEvent.sNwkLeaveIndicationEvent.u8Rejoin != 0U) {
+                APP_vSetNodeState(E_NODE_REJOIN_REQUIRED);
+            }
+            else {
+                /* The device was requested to leave the network without rejoining. */
+                DBG_vPrintf(TRACE_APP, "APP-ZDO: Local device leaving network without rejoin\n");
 
-            APP_vFactoryResetRecords();
-            vAHI_SwReset();
+                APP_vFactoryResetRecords();
+                vAHI_SwReset();
+            }
         }
         break;
 
@@ -339,13 +406,17 @@ PRIVATE void APP_vHandleZdoEvents(BDB_tsZpsAfEvent *psZpsAfEvent)
                     psAfEvent->uEvent.sNwkLeaveConfirmEvent.bRejoin);
 
         if ((psAfEvent->uEvent.sNwkLeaveConfirmEvent.eStatus == ZPS_E_SUCCESS) &&
-            (psAfEvent->uEvent.sNwkLeaveConfirmEvent.u64ExtAddr == 0ULL) &&
-            (psAfEvent->uEvent.sNwkLeaveConfirmEvent.bRejoin == FALSE)) {
-            /* The device successfully left the network without rejoining. */
-            DBG_vPrintf(TRACE_APP, "APP-ZDO: Local device left network without rejoin\n");
+            (psAfEvent->uEvent.sNwkLeaveConfirmEvent.u64ExtAddr == 0ULL)) {
+            if (psAfEvent->uEvent.sNwkLeaveConfirmEvent.bRejoin) {
+                APP_vSetNodeState(E_NODE_REJOIN_REQUIRED);
+            }
+            else {
+                /* The device successfully left the network without rejoining. */
+                DBG_vPrintf(TRACE_APP, "APP-ZDO: Local device left network without rejoin\n");
 
-            APP_vFactoryResetRecords();
-            vAHI_SwReset();
+                APP_vFactoryResetRecords();
+                vAHI_SwReset();
+            }
         }
         break;
 

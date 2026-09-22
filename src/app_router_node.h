@@ -9,5 +9,6 @@
 #include <jendefs.h>
 
 PUBLIC void APP_vInitialiseRouter(void);
+PUBLIC void APP_cbTimerNetworkRetry(void *pvParam);
 
 #endif /* APP_ROUTER_NODE_H */

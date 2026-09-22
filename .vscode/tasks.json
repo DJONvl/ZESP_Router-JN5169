@@ -10,7 +10,7 @@
 		{
 			"label": "Build",
 			"type": "shell",
-			"command": "make",
+			"command": "make BOARD=${input:board}",
 			"group": {
 				"kind": "build",
 				"isDefault": true
@@ -29,6 +29,17 @@
 			"dependsOn": [
 				"Clean",
 				"Build"
+			]
+		}
+	],
+	"inputs": [
+		{
+			"id": "board",
+			"type": "pickString",
+			"description": "Select target board",
+			"options": [
+				"DGNWG05LM",
+				"ZHWG11LM"
 			]
 		}
 	]

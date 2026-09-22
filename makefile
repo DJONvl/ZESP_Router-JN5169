@@ -3,29 +3,27 @@
 # Application target name
 TARGET = LumiRouter
 
+# Target board: DGNWG05LM (Xiaomi) or ZHWG11LM (Aqara).
+# Objects are shared in build/: run make clean before switching boards.
+BOARD ?=
+CFLAGS += -DBOARD_$(BOARD)
+
+# Application version
+VERSION_STRING ?= 26.10.0-beta1
+CFLAGS         += -DVERSION_STRING=\"$(VERSION_STRING)\"
+
 # Application build date
-BUILD_DATE ?= NULL
-ifeq ($(BUILD_DATE), NULL)
+BUILD_DATE ?=
+ifeq ($(strip $(BUILD_DATE)), )
 	CFLAGS += -DBUILD_DATE_STRING=\"$(shell date -u +%Y%m%d)\"
 else
 	CFLAGS += -DBUILD_DATE_STRING=\"$(BUILD_DATE)\"
 endif
 
-# Application version
-VERSION_STRING ?= 2026.9.0b
-CFLAGS         += -DVERSION_STRING=\"$(VERSION_STRING)\"
-
 # Network settings
 # Channel (0 for default channels)
 SINGLE_CHANNEL ?= 0
 CFLAGS         += -DSINGLE_CHANNEL=$(SINGLE_CHANNEL)
-
-# Enabling High Power Mode on the Modules
-# to support the zigbee module installed in the Aqara ZHWG11LM device
-ENABLING_HIGH_POWER_MODE ?= 1
-ifeq ($(ENABLING_HIGH_POWER_MODE), 1)
-	CFLAGS += -DENABLING_HIGH_POWER_MODE
-endif
 
 # Target chip is the JN5169
 JENNIC_CHIP        = JN5169
@@ -48,7 +46,7 @@ MINIMUM_HEAP_SIZE = 2000
 ZNCLKCMD = AppBuildZBPro.ld
 
 # Debug options
-DEBUG ?= NONE
+DEBUG ?=
 DEBUG_ENABLED := 0
 
 ifeq ($(DEBUG), UART0)
@@ -81,10 +79,10 @@ endif
 ifeq ($(DEBUG_ENABLED), 1)
 	TARGET_FEATURES := $(TARGET_FEATURES)_DEBUG_$(DEBUG)
 endif
-ifneq ($(BUILD_DATE), NULL)
+ifneq ($(strip $(BUILD_DATE)), )
 	TARGET_FEATURES := $(TARGET_FEATURES)_$(BUILD_DATE)
 endif
-GENERATED_FILE_NAME = $(TARGET)$(TARGET_FEATURES)
+GENERATED_FILE_NAME = $(TARGET)-$(BOARD)$(TARGET_FEATURES)
 
 # Path definitions
 APP_BASE = $(abspath .)
@@ -152,9 +150,7 @@ LDLIBS := $(APPLDLIBS) $(LDLIBS)
 # Path to directories containing application source 
 vpath % $(APP_SRC_DIR):$(ZCL_SRC_DIRS):$(BDB_SRC_DIR):$(UTIL_SRC_DIR):$(HW_SRC_DIR)
 
-all: pre-build main-build
-
-main-build: $(APP_BLD_DIR)/$(GENERATED_FILE_NAME).bin
+all: pre-build $(APP_BLD_DIR)/$(GENERATED_FILE_NAME).bin
 
 $(APP_SRC_DIR)/pdum_gen.c $(APP_SRC_DIR)/pdum_gen.h $(APP_SRC_DIR)/pdum_apdu.S: $(APP_SRC_DIR)/$(APP_ZPSCFG) $(PDUMCONFIG)
 	$(info Configuring the PDUM ...)
@@ -185,6 +181,13 @@ $(APP_BLD_DIR)/$(GENERATED_FILE_NAME).bin: $(APP_BLD_DIR)/$(GENERATED_FILE_NAME)
 	@echo
 
 pre-build:
+ifeq ($(BOARD), DGNWG05LM)
+	$(info Target board: Xiaomi DGNWG05LM)
+else ifeq ($(BOARD), ZHWG11LM)
+	$(info Target board: Aqara ZHWG11LM)
+else
+	$(error Use make BOARD=DGNWG05LM or make BOARD=ZHWG11LM)
+endif
 ifeq ($(wildcard $(SDK_BASE_DIR)/Stack), )
 	$(error Please check sdk directory)
 endif
@@ -245,5 +248,5 @@ $(TOOLCHAIN_BASE_DIR):
 -include $(APPDEPS)
 
 .NOTPARALLEL:
-.PHONY: all clean install pre-build install-sdk install-toolchain main-build
+.PHONY: all clean install pre-build install-sdk install-toolchain
 .DELETE_ON_ERROR:

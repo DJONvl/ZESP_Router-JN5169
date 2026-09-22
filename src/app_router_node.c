@@ -75,16 +75,26 @@ PUBLIC void APP_vInitialiseRouter(void)
     /* Initialise ZCL. */
     APP_ZCL_vInitialise();
 
-#ifdef ENABLING_HIGH_POWER_MODE
-    /* After testing on Xiaomi DGNWG05LM and Aqara ZHWG11LM devices, it was
-     * decided to use the deprecated vAppApiSetHighPowerMode method for use on
-     * JN5168 instead of the new vAHI_ModuleConfigure method for use on JN5169.
-     * I checked the following options:
-     * - vAHI_ModuleConfigure(E_MODULE_DEFAULT) does not work on Aqara
-     * - vAHI_ModuleConfigure(E_MODULE_JN5169_001_M03_ETSI) does not work on Aqara
-     * - vAHI_ModuleConfigure(E_MODULE_JN5169_001_M06_FCC) low signal on Xiaomi
-     * - vAppApiSetHighPowerMode (APP_API_MODULE_HPM05, TRUE) works well both on Xiaomi and Aqara */
-    vAppApiSetHighPowerMode(APP_API_MODULE_HPM05, TRUE);
+#ifdef BOARD_DGNWG05LM
+    /* Explicitly define the Xiaomi radio profile: a +8 dBm TX limit on all
+     * channels and a raw CCA threshold of 65. Operation remains unchanged
+     * at the default TX power of +8 dBm. */
+    vAppApiSetComplianceLimits(8, 8, 65);
+#endif
+
+#ifdef BOARD_ZHWG11LM
+    /* Aqara uses an external Skyworks SKY66112-11 FEM with an integrated PA and LNA.
+     * Limit JN5169 TX power before the FEM to -2 dBm on channels 11-25
+     * and -10 dBm on channel 26.
+     * When transmitting at these limits, expected FEM output power is approximately
+     * +20 dBm on channels 11-25 and +10 dBm on channel 26. These are datasheet-based
+     * estimates, excluding board losses and antenna gain, not measured values.
+     * Set the raw CCA ED threshold to 97 to account for the typical 11 dB
+     * LNA gain, approximately matching the antenna-referred threshold of
+     * CCA code 65 on Xiaomi without a FEM.
+     * Enable both TX and RX control signals for the FEM. */
+    vAppApiSetComplianceLimits(-2, -10, 97);
+    vAHI_HighPowerModuleEnable(TRUE, TRUE);
 #endif
 
     /* Initialise the ZBPro stack. */

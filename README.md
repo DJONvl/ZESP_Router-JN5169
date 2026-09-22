@@ -51,7 +51,7 @@ Go to `LuCI -> System -> Zigbee Tools` and click the `Soft reset` button.
 jntool soft_reset
 ```
 
-## Building Firmware
+## Building firmware
 
 Use GitHub Codespaces or VS Code Dev Containers for a preconfigured environment,
 or follow the local build instructions below.
@@ -59,7 +59,7 @@ or follow the local build instructions below.
 [![Open in GitHub Codespaces](https://img.shields.io/static/v1?style=for-the-badge&label=GitHub+Codespaces&message=Open&color=lightgrey&logo=github)](https://codespaces.new/igorlistopad/Lumi-Router-JN5169)
 [![Open in Dev Container](https://img.shields.io/static/v1?style=for-the-badge&label=Dev%20Containers&message=Open&color=blue)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/igorlistopad/Lumi-Router-JN5169)
 
-### Local build
+### Local setup
 
 Supported platforms:
 
@@ -72,15 +72,24 @@ Prerequisites:
 - Git, make, and curl
 - Python 3.5 or later
 
-Clone the repository and build the firmware:
+Clone the repository and install the SDK and toolchain:
 
-```bash
+```shell
 git clone --recurse-submodules https://github.com/igorlistopad/Lumi-Router-JN5169.git
 cd Lumi-Router-JN5169
 make install
-make
 ```
 
-`make install` installs the SDK and toolchain.
+### Build
 
-The default firmware binary is located at `build/LumiRouter.bin`.
+Build the firmware with `BOARD=DGNWG05LM` for Xiaomi or
+`BOARD=ZHWG11LM` for Aqara:
+
+```shell
+make BOARD=DGNWG05LM
+```
+
+The firmware is generated as `build/LumiRouter-<BOARD>.bin`.
+
+Run `make clean` before switching boards. This also deletes previously
+generated firmware files.

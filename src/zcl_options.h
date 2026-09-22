@@ -53,7 +53,15 @@ enum {
 #define CLD_BAS_ATTR_SW_BUILD_ID
 
 #define BAS_MANUF_NAME_STRING "OpenLumi"
-#define BAS_MODEL_ID_STRING   "openlumi.gw_router.jn5169"
+
+#ifdef BOARD_DGNWG05LM
+#define BAS_MODEL_ID_STRING   "openlumi.gw_router.dgnwg05lm"
+#endif
+
+#ifdef BOARD_ZHWG11LM
+#define BAS_MODEL_ID_STRING   "openlumi.gw_router.zhwg11lm"
+#endif
+
 #define BAS_DATE_STRING       BUILD_DATE_STRING
 #define BAS_SW_BUILD_STRING   VERSION_STRING
 

@@ -1,13 +1,22 @@
 name: Build Firmware
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - '*'
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build ${{ matrix.board }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [DGNWG05LM, ZHWG11LM]
 
     steps:
     - name: Checkout repository
@@ -19,11 +28,11 @@ jobs:
       run: make install-toolchain
 
     - name: Build
-      run: make
+      run: make BOARD=${{ matrix.board }}
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v7
       with:
-        path: build/*.bin
+        path: build/LumiRouter-${{ matrix.board }}.bin
         if-no-files-found: error
         archive: false

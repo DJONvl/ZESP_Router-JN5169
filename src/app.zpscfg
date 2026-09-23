@@ -89,8 +89,12 @@
     </Profiles>
     <Profiles Name="HA" Id="0x0104">
         <Clusters Name="Basic" Id="0x0000"/>
-        <Clusters Name="DeviceTemperatureConfiguration" Id="0x0002"/>
         <Clusters Name="Identify" Id="0x0003"/>
+        <Clusters Name="OnOff" Id="0x0006"/>
+        <Clusters Name="LevelControl" Id="0x0008"/>
+        <Clusters Name="MultistateOutput" Id="0x0013"/>
+        <Clusters Name="ColourControl" Id="0x0300"/>
+        <Clusters Name="IlluminanceMeasurement" Id="0x0400"/>
         <Clusters Name="Default" Id="0xFFFF"/>
     </Profiles>
     <ChildNodes xsi:type="zpscfg:Router" Name="LumiRouter" DiscoveryNeighbourTableSize="16" ActiveNeighbourTableSize="26" RouteDiscoveryTableSize="4" RoutingTableSize="70" BroadcastTransactionTableSize="25" RouteRecordTableSize="1" AddressMapTableSize="10" SecurityMaterialSets="2" MaxNumSimultaneousApsdeReq="5" MaxNumSimultaneousApsdeAckReq="3" MACMutexName="mutexMAC" ZPSMutexName="" FragmentationMaxNumSimulRx="0" FragmentationMaxNumSimulTx="0" DefaultEventMessageName="APP_vZpsEventHandler" MACDcfmIndMessage="zps_msgDcfmInd" MACTimeEventMessage="zps_msgTimeEvents" apsNonMemberRadius="2" apsDesignatedCoordinator="false" apsUseInsecureJoin="false" apsMaxWindowSize="8" apsInterframeDelay="10" APSDuplicateTableSize="8" apsSecurityTimeoutPeriod="6000" apsUseExtPANId="0x0000000000000000" SecurityEnabled="true" MACMlmeDcfmIndMessage="zps_msgMlmeDcfmInd" MACMcpsDcfmIndMessage="zps_msgMcpsDcfmInd" APSPersistenceTime="100" NumAPSMESimulCommands="4" StackProfile="2" InterPAN="false" GreenPowerSupport="false" NwkFcSaveCountBitShift="10" ApsFcSaveCountBitShift="10" MacTableSize="36" DefaultCallbackName="APP_vGenCallback" PermitJoiningTime="0" ChildTableSize="13" ScanDuration="3" NetworkSelection="User Selected">
@@ -264,10 +268,22 @@
             <OutputClusters Cluster="Mgmt_NWK_Update_rsp" TxAPDUs="LumiRouter->apduZDP" Discoverable="false"/>
             <OutputClusters Cluster="Parent_Annce_rsp" TxAPDUs="LumiRouter->apduZDP" Discoverable="true"/>
         </Endpoints>
-        <Endpoints Id="1" Enabled="true" ApplicationDeviceId="0x0008" ApplicationDeviceVersion="0" Profile="HA" Message="APP_ZCL_vEventHandler" Name="Application">
+        <Endpoints Id="1" Enabled="true" ApplicationDeviceId="0x010D" ApplicationDeviceVersion="0" Profile="HA" Message="APP_ZCL_vEventHandler" Name="Application">
             <InputClusters Cluster="Basic" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
             <InputClusters Cluster="Identify" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
-            <InputClusters Cluster="DeviceTemperatureConfiguration" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
+            <InputClusters Cluster="OnOff" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
+            <InputClusters Cluster="LevelControl" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
+            <InputClusters Cluster="ColourControl" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
+            <InputClusters Cluster="Default" RxAPDU="LumiRouter->apduZCL" Discoverable="false"/>
+        </Endpoints>
+        <Endpoints Id="2" Enabled="true" ApplicationDeviceId="0x0106" ApplicationDeviceVersion="0" Profile="HA" Message="APP_ZCL_vEventHandler" Name="Sensor">
+            <InputClusters Cluster="IlluminanceMeasurement" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
+            <InputClusters Cluster="Default" RxAPDU="LumiRouter->apduZCL" Discoverable="false"/>
+        </Endpoints>
+        <Endpoints Id="3" Enabled="true" ApplicationDeviceId="0x0007" ApplicationDeviceVersion="0" Profile="HA" Message="APP_ZCL_vEventHandler" Name="Doorbell">
+            <InputClusters Cluster="OnOff" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
+            <InputClusters Cluster="LevelControl" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
+            <InputClusters Cluster="MultistateOutput" RxAPDU="LumiRouter->apduZCL" Discoverable="true"/>
             <InputClusters Cluster="Default" RxAPDU="LumiRouter->apduZCL" Discoverable="false"/>
         </Endpoints>
         <PDUConfiguration NumNPDUs="25" PDUMMutexName="mutexPDUM">

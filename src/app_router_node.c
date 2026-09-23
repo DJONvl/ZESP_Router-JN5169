@@ -10,7 +10,8 @@
 
 /* Application */
 #include "PDM_IDs.h"
-#include "app_device_temperature.h"
+#include "app_doorbell.h"
+#include "app_lamp.h"
 #include "app_main.h"
 #include "app_reporting.h"
 #include "app_router_node.h"
@@ -105,9 +106,6 @@ PUBLIC void APP_vInitialiseRouter(void)
 
     /* Initialise BDB. */
     APP_vBdbInit();
-
-    /* Initialise the device temperature sensor. */
-    APP_vDeviceTemperatureInit();
 
     /* Restore reporting configuration or load defaults. */
     if (!APP_bRestoreReports()) {
@@ -319,6 +317,8 @@ PRIVATE void APP_vHandleAfEvents(BDB_tsZpsAfEvent *psZpsAfEvent)
 
     switch (psZpsAfEvent->u8EndPoint) {
     case LUMIROUTER_APPLICATION_ENDPOINT:
+    case LUMIROUTER_SENSOR_ENDPOINT:
+    case LUMIROUTER_DOORBELL_ENDPOINT:
         if (psAfEvent->eType == ZPS_EVENT_APS_DATA_INDICATION) {
             APP_ZCL_vEventHandler(psAfEvent);
         }
@@ -526,6 +526,8 @@ PRIVATE void APP_vFactoryResetRecords(void)
     /* Persist factory-default application and stack state. */
     APP_vSetNodeState(E_NODE_NOT_JOINED);
     APP_vLoadDefaultReports();
+    APP_LAMP_vFactoryReset();
+    APP_DOORBELL_vFactoryReset();
     ZPS_vSaveAllZpsRecords();
 }
 

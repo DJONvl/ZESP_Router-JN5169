@@ -12,7 +12,7 @@
 #define ZCL_MANUFACTURER_CODE 0x1037
 
 /* Number of endpoints supported by this device */
-#define ZCL_NUMBER_OF_ENDPOINTS 1
+#define ZCL_NUMBER_OF_ENDPOINTS 3
 
 /* Set this True to disable non-error default responses from clusters */
 #define ZCL_DISABLE_DEFAULT_RESPONSES (TRUE)
@@ -27,9 +27,12 @@
 #define ZCL_CONFIGURE_ATTRIBUTE_REPORTING_SERVER_SUPPORTED
 #define ZCL_READ_ATTRIBUTE_REPORTING_CONFIGURATION_SERVER_SUPPORTED
 
-/* Reporting related configuration */
+/* Reporting related configuration (lamp attributes on EP1) */
 enum {
-    REPORT_DEVICE_TEMPERATURE_CONFIGURATION_SLOT = 0,
+    REPORT_LAMP_ONOFF_SLOT = 0,
+    REPORT_LAMP_LEVEL_SLOT,
+    REPORT_LAMP_CURRENT_X_SLOT,
+    REPORT_LAMP_CURRENT_Y_SLOT,
     NUMBER_OF_REPORTS
 };
 
@@ -43,23 +46,41 @@ enum {
 #define BASIC_SERVER
 #define CLD_IDENTIFY
 #define IDENTIFY_SERVER
-#define CLD_DEVICE_TEMPERATURE_CONFIGURATION
-#define DEVICE_TEMPERATURE_CONFIGURATION_SERVER
+
+/* Virtual RGB lamp on EP1, virtual sensor on EP2, virtual doorbell
+ * on EP3 (server clusters, no GPIO) */
+#define CLD_ONOFF
+#define ONOFF_SERVER
+#define CLD_LEVEL_CONTROL
+#define LEVEL_CONTROL_SERVER
+#define CLD_COLOUR_CONTROL
+#define COLOUR_CONTROL_SERVER
+#define CLD_MULTISTATE_OUTPUT_BASIC
+#define MULTISTATE_OUTPUT_BASIC_SERVER
+#define CLD_ILLUMINANCE_MEASUREMENT
+#define ILLUMINANCE_MEASUREMENT_SERVER
+
+/* Colour capabilities: Hue/Saturation + CIE XY (no colour temperature, no loop) */
+#define CLD_COLOURCONTROL_COLOUR_CAPABILITIES \
+    (COLOUR_CAPABILITY_HUE_SATURATION_SUPPORTED | COLOUR_CAPABILITY_XY_SUPPORTED)
 
 /* Basic cluster optional attributes */
 #define CLD_BAS_ATTR_MANUFACTURER_NAME
 #define CLD_BAS_ATTR_MODEL_IDENTIFIER
 #define CLD_BAS_ATTR_DATE_CODE
 #define CLD_BAS_ATTR_SW_BUILD_ID
+#define CLD_BAS_ATTR_HARDWARE_VERSION
 
-#define BAS_MANUF_NAME_STRING "OpenLumi"
+#define BAS_MANUF_NAME_STRING "VLK_SW"
 
 #ifdef BOARD_DGNWG05LM
-#define BAS_MODEL_ID_STRING   "openlumi.gw_router.dgnwg05lm"
+#define BAS_MODEL_ID_STRING   "ZESP_Router"
+#define BAS_HARDWARE_VERSION  2U
 #endif
 
 #ifdef BOARD_ZHWG11LM
-#define BAS_MODEL_ID_STRING   "openlumi.gw_router.zhwg11lm"
+#define BAS_MODEL_ID_STRING   "ZESP_Router"
+#define BAS_HARDWARE_VERSION  3U
 #endif
 
 #define BAS_DATE_STRING       BUILD_DATE_STRING

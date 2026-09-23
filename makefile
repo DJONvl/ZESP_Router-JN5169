@@ -32,6 +32,12 @@ JENNIC_CHIP_FAMILY = JN516x
 # Select the network stack (e.g. MAC, ZBPro, ZCL)
 JENNIC_STACK = ZCL
 
+# Lighting clusters (ColourControl) and ZLO devices for the virtual lamp
+APP_CLUSTER_LIGHTING_SRC = 1
+
+# Measurement clusters (IlluminanceMeasurement) for the virtual sensor
+APP_CLUSTERS_MEASUREMENT_AND_SENSING_SRC = 1
+
 # Default SDK is the IEEE802.15.4 SDK
 JENNIC_SDK = JN-SW-4170
 
@@ -66,7 +72,7 @@ ifeq ($(DEBUG_ENABLED), 1)
 	CFLAGS += -DTRACE_ZCL=1
 	CFLAGS += -DTRACE_UART=1
 	CFLAGS += -DTRACE_SERIAL=1
-	CFLAGS += -DTRACE_DEVICE_TEMPERATURE=1
+	CFLAGS += -DTRACE_LAMP=1
 endif
 
 # BDB features – Enable as required
@@ -109,8 +115,10 @@ APPSRC += app_router_node.c
 APPSRC += app_zcl_task.c
 APPSRC += app_reporting.c
 APPSRC += app_serial_commands.c
-APPSRC += app_device_temperature.c
 APPSRC += app_uart.c
+APPSRC += app_lamp.c
+APPSRC += app_sensor.c
+APPSRC += app_doorbell.c
 APP_ZPSCFG = app.zpscfg
 
 # Standard Application header search paths

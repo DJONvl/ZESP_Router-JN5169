@@ -220,7 +220,7 @@ ifeq ($(wildcard $(SDK_BASE_DIR)/Stack), )
 ifneq ($(shell git submodule status $(SDK_BASE_DIR) 2> /dev/null), )
 	git submodule update --init
 else
-	curl -fL --retry 3 "https://github.com/igorlistopad/JN-SW-4170/archive/refs/heads/v1840.tar.gz" \
+	curl -fL --retry 3 "https://github.com/DJONvl/JN-SW-4170/archive/refs/heads/v1840.tar.gz" \
 		-o "$(SDK_BASE_DIR)/../JN-SW-4170.tar.gz"
 	tar -xzf $(SDK_BASE_DIR)/../JN-SW-4170.tar.gz --strip-components=1 -C $(SDK_BASE_DIR)
 	rm $(SDK_BASE_DIR)/../JN-SW-4170.tar.gz
@@ -244,7 +244,7 @@ ifeq ($(wildcard $(TOOLCHAIN_BASE_DIR)/bin), )
 			"Unsupported toolchain platform" \
 			"Try using a Linux Dev Container in Visual Studio Code" >&2; exit 1 ;; \
 	esac; \
-	curl -fL --retry 3 "https://github.com/igorlistopad/BA2-toolchain/releases/download/2026.9.12/ba2-toolchain-$$platform.tar.gz" \
+	curl -fL --retry 3 "https://github.com/DJONvl/BA2-toolchain/releases/download/2026.9.12/ba2-toolchain-$$platform.tar.gz" \
 		-o "$(TOOL_COMMON_BASE_DIR)/ba2-toolchain.tar.gz"
 	tar -xzf "$(TOOL_COMMON_BASE_DIR)/ba2-toolchain.tar.gz" --strip-components=1 -C "$(TOOLCHAIN_BASE_DIR)"
 	rm "$(TOOL_COMMON_BASE_DIR)/ba2-toolchain.tar.gz"

@@ -21,7 +21,7 @@ These instructions assume that alternative __OpenWrt__ firmware is already insta
 2. Run the following commands:
 
 ```shell
-wget https://github.com/igorlistopad/Lumi-Router-JN5169/releases/latest/download/LumiRouter.bin -P /tmp
+wget https://github.com/DJONvl/ZESP_Router-JN5169/releases/latest/download/LumiRouter.bin -P /tmp
 jnflash /tmp/LumiRouter.bin
 ```
 
@@ -56,8 +56,8 @@ jntool soft_reset
 Use GitHub Codespaces or VS Code Dev Containers for a preconfigured environment,
 or follow the local build instructions below.
 
-[![Open in GitHub Codespaces](https://img.shields.io/static/v1?style=for-the-badge&label=GitHub+Codespaces&message=Open&color=lightgrey&logo=github)](https://codespaces.new/igorlistopad/Lumi-Router-JN5169)
-[![Open in Dev Container](https://img.shields.io/static/v1?style=for-the-badge&label=Dev%20Containers&message=Open&color=blue)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/igorlistopad/Lumi-Router-JN5169)
+[![Open in GitHub Codespaces](https://img.shields.io/static/v1?style=for-the-badge&label=GitHub+Codespaces&message=Open&color=lightgrey&logo=github)](https://codespaces.new/DJONvl/ZESP_Router-JN5169)
+[![Open in Dev Container](https://img.shields.io/static/v1?style=for-the-badge&label=Dev%20Containers&message=Open&color=blue)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/DJONvl/ZESP_Router-JN5169)
 
 ### Local setup
 
@@ -75,8 +75,8 @@ Prerequisites:
 Clone the repository and install the SDK and toolchain:
 
 ```shell
-git clone --recurse-submodules https://github.com/igorlistopad/Lumi-Router-JN5169.git
-cd Lumi-Router-JN5169
+git clone --recurse-submodules https://github.com/DJONvl/ZESP_Router-JN5169.git
+cd ZESP_Router-JN5169
 make install
 ```
 

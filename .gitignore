@@ -5,5 +5,8 @@ src/pdum_gen.*
 src/zps_gen.*
 tools/
 
+# Local NXP application-note reference copy, not part of the project
+JN-AN-1219-Zigbee-3-0-Controller-and-Switch/
+
 # MacOS indexing file
 .DS_Store

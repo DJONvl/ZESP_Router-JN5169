@@ -49,6 +49,7 @@ PRIVATE void APP_LAMP_vReadAttributes(bool_t *pbOnOff, uint8 *pu8Level, uint16 *
 PRIVATE const char *APP_LAMP_pcCommandName(uint8 u8Command);
 PRIVATE uint8 APP_LAMP_u8AppendText(const char *pcText, char *pcOut);
 PRIVATE uint8 APP_LAMP_u8AppendDec(uint8 u8Value, char *pcOut);
+PRIVATE uint8 APP_LAMP_u8AppendDec32(uint32 u32Value, char *pcOut);
 
 /**
  * @brief Restores the lamp state from PDM (or defaults) and applies it to ZCL
@@ -116,27 +117,39 @@ PUBLIC void APP_LAMP_vApplyToAttributes(void)
 
 /**
  * @brief Handles an On/Off cluster command from the Zigbee network
- * @note  The stack has already applied the command to the attribute.
+ * @note  Power state is derived from the command itself: with LevelControl
+ *        present the stack defers the OnOff attribute (the transition
+ *        engine sets it on completion), so the attribute lags here.
+ *        OnOff commands never touch brightness: any level transition
+ *        the stack started is cancelled and the level is restored.
  */
 PUBLIC void APP_LAMP_vOnOffCommand(uint8 u8ZclCommandId)
 {
     uint8 u8Command;
 
-    sState.bOnOff = sLumiRouter.sOnOffServerCluster.bOnOff ? TRUE : FALSE;
-
     switch (u8ZclCommandId) {
     case 0x00: /* E_CLD_ONOFF_CMD_OFF */
+        sState.bOnOff = FALSE;
         u8Command = LAMP_CMD_OFF;
         break;
 
     case 0x01: /* E_CLD_ONOFF_CMD_ON */
+        sState.bOnOff = TRUE;
         u8Command = LAMP_CMD_ON;
         break;
 
-    default: /* E_CLD_ONOFF_CMD_TOGGLE and others */
+    default: /* E_CLD_ONOFF_CMD_TOGGLE and others: invert */
+        sState.bOnOff = sState.bOnOff ? FALSE : TRUE;
         u8Command = LAMP_CMD_TOGGLE;
         break;
     }
+
+    /* Force the attribute (the engine lags) and decouple brightness. */
+    sLumiRouter.sOnOffServerCluster.bOnOff = sState.bOnOff;
+    sLumiRouter.sLevelControlServerCustomDataStructure.sTransition.eTransition =
+        E_CLD_LEVELCONTROL_TRANSITION_NONE;
+    sLumiRouter.sLevelControlServerCustomDataStructure.sTransition.bWithOnOff = FALSE;
+    sLumiRouter.sLevelControlServerCluster.u8CurrentLevel = sState.u8Level;
 
     DBG_vPrintf(TRACE_LAMP, "Lamp: OnOff command=%02x state=%d\n", u8ZclCommandId, sState.bOnOff);
 
@@ -147,12 +160,16 @@ PUBLIC void APP_LAMP_vOnOffCommand(uint8 u8ZclCommandId)
 /**
  * @brief Handles a Level Control cluster command from the Zigbee network
  * @param u8TargetLevel Level payload of MoveToLevel commands, ignored otherwise
+ * @note  Level commands never touch OnOff, even the WithOnOff variants:
+ *        brightness and power are fully independent here.
  */
 PUBLIC void APP_LAMP_vLevelCommand(uint8 u8ZclCommandId, uint8 u8TargetLevel, bool_t bWithOnOff)
 {
     bool_t bOnOff;
     uint8 u8Level;
     uint8 u8Command = LAMP_CMD_SET_LEVEL;
+
+    (void)bWithOnOff;
 
     /* Discrete target commands carry their final level in the payload.
      * Continuous commands (Move/Step/Stop) mirror the live attribute value;
@@ -163,11 +180,6 @@ PUBLIC void APP_LAMP_vLevelCommand(uint8 u8ZclCommandId, uint8 u8TargetLevel, bo
         u8Level = (u8TargetLevel > APP_LAMP_LEVEL_MAX) ? APP_LAMP_LEVEL_MAX : u8TargetLevel;
         sState.u8Level = u8Level;
 
-        if (bWithOnOff) {
-            sState.bOnOff = (u8Level > 0U) ? TRUE : FALSE;
-            sLumiRouter.sOnOffServerCluster.bOnOff = sState.bOnOff;
-        }
-
         /* Short-circuit the transition: a virtual lamp has no hardware
          * ramp, the host applies the target immediately. Neutralise the
          * stack engine too, otherwise it overwrites the attribute from
@@ -175,6 +187,7 @@ PUBLIC void APP_LAMP_vLevelCommand(uint8 u8ZclCommandId, uint8 u8TargetLevel, bo
         sLumiRouter.sLevelControlServerCluster.u8CurrentLevel = u8Level;
         sLumiRouter.sLevelControlServerCustomDataStructure.sTransition.eTransition =
             E_CLD_LEVELCONTROL_TRANSITION_NONE;
+        sLumiRouter.sLevelControlServerCustomDataStructure.sTransition.bWithOnOff = FALSE;
         sLumiRouter.sLevelControlServerCustomDataStructure.sTransition.iCurrentLevel =
             (int)u8Level * 100;
         sLumiRouter.sLevelControlServerCustomDataStructure.sTransition.iTargetLevel =
@@ -554,6 +567,10 @@ PRIVATE void APP_LAMP_vSaveState(void)
  * @brief Builds a state JSON line and sends it to the host
  * @details Line format (no stdio on this target, formatted by hand):
  * {"cmd":"on","onoff":1,"level":254,"r":255,"g":255,"b":255}
+ * Consecutive duplicates are dropped (the stack often emits several
+ * identical updates per command); seq advances only on actual sends.
+ * Only the state is compared, not the command name: an echo and a
+ * transition update carrying the same values are the same news twice.
  */
 PRIVATE void
 APP_LAMP_vSendSnapshot(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint16 u16X, uint16 u16Y)
@@ -561,8 +578,24 @@ APP_LAMP_vSendSnapshot(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint16 u16
     uint8 u8R;
     uint8 u8G;
     uint8 u8B;
-    char acLine[80];
+    char acLine[128];
     uint8 u8Length = 0U;
+
+    static bool_t bLastOnOff = FALSE;
+    static uint8 u8LastLevel = 0xFFU;
+    static uint16 u16LastX = 0xFFFFU;
+    static uint16 u16LastY = 0xFFFFU;
+
+    if ((bOnOff == bLastOnOff) && (u8Level == u8LastLevel) &&
+        (u16X == u16LastX) && (u16Y == u16LastY)) {
+        return;
+    }
+
+    bLastOnOff = bOnOff;
+    bLastOnOff = bOnOff;
+    u8LastLevel = u8Level;
+    u16LastX = u16X;
+    u16LastY = u16Y;
 
     APP_LAMP_vXyToRgb(u16X, u16Y, &u8R, &u8G, &u8B);
 
@@ -587,6 +620,8 @@ APP_LAMP_vSendSnapshot(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint16 u16
     u8Length += APP_LAMP_u8AppendDec(u8G, &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendText(",\"b\":", &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendDec(u8B, &acLine[u8Length]);
+    u8Length += APP_LAMP_u8AppendText(",\"seq\":", &acLine[u8Length]);
+    u8Length += APP_LAMP_u8AppendDec32(APP_u32NextSeq(), &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendText("}", &acLine[u8Length]);
     acLine[u8Length] = '\0';
 
@@ -668,6 +703,32 @@ PRIVATE uint8 APP_LAMP_u8AppendDec(uint8 u8Value, char *pcOut)
 
     *pcOut = (char)('0' + u8Value);
     return (uint8)(u8Length + 1U);
+}
+
+/**
+ * @brief Formats 0..4294967295 decimal, returns its length
+ */
+PRIVATE uint8 APP_LAMP_u8AppendDec32(uint32 u32Value, char *pcOut)
+{
+    uint8 u8Length = 0U;
+    uint32 u32Divisor = 1000000000UL;
+    bool_t bStarted = FALSE;
+
+    while (u32Divisor > 0UL) {
+        uint8 u8Digit = (uint8)(u32Value / u32Divisor);
+
+        if ((u8Digit != 0U) || bStarted || (u32Divisor == 1UL)) {
+            *pcOut = (char)('0' + u8Digit);
+            pcOut++;
+            u8Length++;
+            bStarted = TRUE;
+        }
+
+        u32Value %= u32Divisor;
+        u32Divisor /= 10UL;
+    }
+
+    return u8Length;
 }
 
 /**

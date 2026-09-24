@@ -41,4 +41,7 @@ PUBLIC void APP_vProcessSerialRx(void);
 PUBLIC void APP_vSendSerialMessage(const char *pcMessage);
 PUBLIC void APP_vSendSerialLine(const char *pcLine);
 
+/* Monotonic sequence number for module->host lines (wraps at 2^32) */
+PUBLIC uint32 APP_u32NextSeq(void);
+
 #endif /* APP_SERIAL_COMMANDS_H */

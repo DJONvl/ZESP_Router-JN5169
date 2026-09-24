@@ -13,6 +13,7 @@
 #include "app_sensor.h"
 #include "app_serial_commands.h"
 #include "app_uart.h"
+#include "app_zcl_task.h"
 
 /* SDK JN-SW-4170 */
 #include "AppHardwareApi.h"
@@ -49,6 +50,11 @@ PRIVATE void APP_vProcessJsonChar(uint8 u8Char);
 PRIVATE void APP_vProcessJsonLine(const char *pcLine);
 PRIVATE bool_t APP_bGetJsonInt(const char *pcLine, const char *pcKey, uint16 *pu16Value);
 PRIVATE void APP_vSendIeeeLine(void);
+PRIVATE void APP_vSendFullState(void);
+PRIVATE uint8 APP_vAppendText(const char *pcText, char *pcOut);
+PRIVATE uint8 APP_vAppendDec(uint8 u8Value, char *pcOut);
+PRIVATE uint8 APP_vAppendDec16(uint16 u16Value, char *pcOut);
+PRIVATE uint8 APP_vAppendDec32(uint32 u32Value, char *pcOut);
 PRIVATE void APP_vProcessFrame(uint16 u16Type, const uint8 *pu8Payload, uint8 u8Length);
 PRIVATE void APP_vProcessCommand(uint8 u8Command);
 
@@ -97,6 +103,23 @@ PUBLIC void APP_vSendSerialLine(const char *pcLine)
 
     UART_vWriteByte('\n');
     UART_vWaitForTxComplete();
+}
+
+/**
+ * @brief Next monotonic sequence number for module->host lines
+ * @details Lets the host drop stale duplicates: PDM stalls can delay
+ * snapshots by seconds, so lines may arrive out of order. Starts at 1.
+ */
+PUBLIC uint32 APP_u32NextSeq(void)
+{
+    static uint32 u32Seq = 0U;
+
+    u32Seq++;
+    if (u32Seq == 0U) {
+        u32Seq = 1U;
+    }
+
+    return u32Seq;
 }
 
 /**
@@ -174,6 +197,10 @@ PRIVATE void APP_vProcessJsonLine(const char *pcLine)
 
     if (APP_bGetJsonInt(pcLine, "getieee", &u16Value) && (u16Value != 0U)) {
         APP_vSendIeeeLine();
+    }
+
+    if (APP_bGetJsonInt(pcLine, "get", &u16Value) && (u16Value != 0U)) {
+        APP_vSendFullState();
     }
 
     if (APP_bGetJsonInt(pcLine, "onoff", &u16Value)) {
@@ -270,6 +297,147 @@ PRIVATE void APP_vSendIeeeLine(void)
     DBG_vPrintf(TRACE_SERIAL, "Serial: TX line=\"%s\"\n", acLine);
 
     APP_vSendSerialLine(acLine);
+}
+
+/**
+ * @brief Replies with the full live state of all virtual devices
+ * @details Read-only: attributes are never modified. Line format:
+ * {"cmd":"state","onoff":1,"level":56,"r":255,"g":0,"b":0,
+ *  "play":0,"volume":132,"melody":3,"lux":12500}
+ */
+PRIVATE void APP_vSendFullState(void)
+{
+    uint8 u8R;
+    uint8 u8G;
+    uint8 u8B;
+    char acLine[160];
+    uint8 u8Length = 0U;
+
+    APP_LAMP_vXyToRgb(sLumiRouter.sColourControlServerCluster.u16CurrentX,
+                      sLumiRouter.sColourControlServerCluster.u16CurrentY,
+                      &u8R,
+                      &u8G,
+                      &u8B);
+
+    u8Length += APP_vAppendText("{\"cmd\":\"state\",\"onoff\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec(sLumiRouter.sOnOffServerCluster.bOnOff ? 1U : 0U, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"level\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec(sLumiRouter.sLevelControlServerCluster.u8CurrentLevel, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"r\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec(u8R, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"g\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec(u8G, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"b\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec(u8B, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"play\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec(sDoorbell.sOnOffServerCluster.bOnOff ? 1U : 0U, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"volume\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec(sDoorbell.sLevelControlServerCluster.u8CurrentLevel, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"melody\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec16(sDoorbell.sMultistateOutputServerCluster.u16PresentValue, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"lux\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec16(sSensor.sIlluminanceMeasurementServerCluster.u16MeasuredValue,
+                                 &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"seq\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec32(APP_u32NextSeq(), &acLine[u8Length]);
+    u8Length += APP_vAppendText("}", &acLine[u8Length]);
+    acLine[u8Length] = '\0';
+
+    APP_vSendSerialLine(acLine);
+}
+
+/**
+ * @brief Copies a string, returns its length
+ */
+PRIVATE uint8 APP_vAppendText(const char *pcText, char *pcOut)
+{
+    uint8 u8Length = 0U;
+
+    while (*pcText != '\0') {
+        *pcOut = *pcText;
+        pcOut++;
+        pcText++;
+        u8Length++;
+    }
+
+    return u8Length;
+}
+
+/**
+ * @brief Formats 0..255 decimal, returns its length
+ */
+PRIVATE uint8 APP_vAppendDec(uint8 u8Value, char *pcOut)
+{
+    uint8 u8Length = 0U;
+
+    if (u8Value >= 100U) {
+        *pcOut = (char)('0' + u8Value / 100U);
+        pcOut++;
+        u8Length++;
+        u8Value %= 100U;
+    }
+
+    if ((u8Length > 0U) || (u8Value >= 10U)) {
+        *pcOut = (char)('0' + u8Value / 10U);
+        pcOut++;
+        u8Length++;
+        u8Value %= 10U;
+    }
+
+    *pcOut = (char)('0' + u8Value);
+    return (uint8)(u8Length + 1U);
+}
+
+/**
+ * @brief Formats 0..65535 decimal, returns its length
+ */
+PRIVATE uint8 APP_vAppendDec16(uint16 u16Value, char *pcOut)
+{
+    uint8 u8Length = 0U;
+    uint16 u16Divisor = 10000U;
+    bool_t bStarted = FALSE;
+
+    while (u16Divisor > 0U) {
+        uint8 u8Digit = (uint8)(u16Value / u16Divisor);
+
+        if ((u8Digit != 0U) || bStarted || (u16Divisor == 1U)) {
+            *pcOut = (char)('0' + u8Digit);
+            pcOut++;
+            u8Length++;
+            bStarted = TRUE;
+        }
+
+        u16Value %= u16Divisor;
+        u16Divisor /= 10U;
+    }
+
+    return u8Length;
+}
+
+/**
+ * @brief Formats 0..4294967295 decimal, returns its length
+ */
+PRIVATE uint8 APP_vAppendDec32(uint32 u32Value, char *pcOut)
+{
+    uint8 u8Length = 0U;
+    uint32 u32Divisor = 1000000000UL;
+    bool_t bStarted = FALSE;
+
+    while (u32Divisor > 0UL) {
+        uint8 u8Digit = (uint8)(u32Value / u32Divisor);
+
+        if ((u8Digit != 0U) || bStarted || (u32Divisor == 1UL)) {
+            *pcOut = (char)('0' + u8Digit);
+            pcOut++;
+            u8Length++;
+            bStarted = TRUE;
+        }
+
+        u32Value %= u32Divisor;
+        u32Divisor /= 10UL;
+    }
+
+    return u8Length;
 }
 
 /**

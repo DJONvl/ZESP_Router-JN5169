@@ -61,6 +61,7 @@ PRIVATE const char *APP_DOORBELL_pcCommandName(uint8 u8Command);
 PRIVATE uint8 APP_DOORBELL_u8AppendText(const char *pcText, char *pcOut);
 PRIVATE uint8 APP_DOORBELL_u8AppendDec(uint8 u8Value, char *pcOut);
 PRIVATE uint8 APP_DOORBELL_u8AppendDec16(uint16 u16Value, char *pcOut);
+PRIVATE uint8 APP_DOORBELL_u8AppendDec32(uint32 u32Value, char *pcOut);
 
 /**
  * @brief Restores the doorbell state from PDM (or defaults)
@@ -307,11 +308,25 @@ PRIVATE void APP_DOORBELL_vSaveState(void)
  * @brief Builds a state JSON line and sends it to the host
  * @details Line format:
  * {"cmd":"ring","play":1,"volume":132,"melody":3}
+ * Consecutive duplicates are dropped; seq advances only on sends.
  */
 PRIVATE void APP_DOORBELL_vSendSnapshot(uint8 u8Command)
 {
-    char acLine[96];
+    char acLine[128];
     uint8 u8Length = 0U;
+
+    static bool_t bLastPlay = FALSE;
+    static uint8 u8LastVolume = 0xFFU;
+    static uint16 u16LastMelody = 0xFFFFU;
+
+    if ((sState.bPlay == bLastPlay) &&
+        (sState.u8Volume == u8LastVolume) && (sState.u16Melody == u16LastMelody)) {
+        return;
+    }
+
+    bLastPlay = sState.bPlay;
+    u8LastVolume = sState.u8Volume;
+    u16LastMelody = sState.u16Melody;
 
     u8Length += APP_DOORBELL_u8AppendText("{\"cmd\":\"", &acLine[u8Length]);
     u8Length += APP_DOORBELL_u8AppendText(APP_DOORBELL_pcCommandName(u8Command), &acLine[u8Length]);
@@ -321,6 +336,8 @@ PRIVATE void APP_DOORBELL_vSendSnapshot(uint8 u8Command)
     u8Length += APP_DOORBELL_u8AppendDec(sState.u8Volume, &acLine[u8Length]);
     u8Length += APP_DOORBELL_u8AppendText(",\"melody\":", &acLine[u8Length]);
     u8Length += APP_DOORBELL_u8AppendDec16(sState.u16Melody, &acLine[u8Length]);
+    u8Length += APP_DOORBELL_u8AppendText(",\"seq\":", &acLine[u8Length]);
+    u8Length += APP_DOORBELL_u8AppendDec32(APP_u32NextSeq(), &acLine[u8Length]);
     u8Length += APP_DOORBELL_u8AppendText("}", &acLine[u8Length]);
     acLine[u8Length] = '\0';
 
@@ -435,6 +452,32 @@ PRIVATE uint8 APP_DOORBELL_u8AppendDec16(uint16 u16Value, char *pcOut)
 
         u16Value %= u16Divisor;
         u16Divisor /= 10U;
+    }
+
+    return u8Length;
+}
+
+/**
+ * @brief Formats 0..4294967295 decimal, returns its length
+ */
+PRIVATE uint8 APP_DOORBELL_u8AppendDec32(uint32 u32Value, char *pcOut)
+{
+    uint8 u8Length = 0U;
+    uint32 u32Divisor = 1000000000UL;
+    bool_t bStarted = FALSE;
+
+    while (u32Divisor > 0UL) {
+        uint8 u8Digit = (uint8)(u32Value / u32Divisor);
+
+        if ((u8Digit != 0U) || bStarted || (u32Divisor == 1UL)) {
+            *pcOut = (char)('0' + u8Digit);
+            pcOut++;
+            u8Length++;
+            bStarted = TRUE;
+        }
+
+        u32Value %= u32Divisor;
+        u32Divisor /= 10UL;
     }
 
     return u8Length;

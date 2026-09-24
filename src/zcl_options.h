@@ -14,8 +14,9 @@
 /* Number of endpoints supported by this device */
 #define ZCL_NUMBER_OF_ENDPOINTS 3
 
-/* Set this True to disable non-error default responses from clusters */
-#define ZCL_DISABLE_DEFAULT_RESPONSES (TRUE)
+/* Keep default responses enabled: the coordinator waits for them and
+ * retries commands without an answer (duplicate snapshots). */
+#define ZCL_DISABLE_DEFAULT_RESPONSES (FALSE)
 
 /* ZCL global attribute commands supported by the server */
 #define ZCL_ATTRIBUTE_READ_SERVER_SUPPORTED

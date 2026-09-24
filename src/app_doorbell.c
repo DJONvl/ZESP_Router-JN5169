@@ -30,7 +30,7 @@
 #define TRACE_DOORBELL FALSE
 #endif
 
-#define APP_DOORBELL_STATE_MAGIC 0x4C524401UL /* LR + D (Doorbell) + revision 1 */
+#define APP_DOORBELL_STATE_MAGIC 0x5A524401UL /* ZR (Zigbee Router) + D (Doorbell) + revision 1 */
 
 /* Power-on defaults: stopped, full volume, melody 0 */
 #define APP_DOORBELL_DEFAULT_VOLUME 0xFEU

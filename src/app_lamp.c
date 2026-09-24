@@ -22,7 +22,7 @@
 #define TRACE_LAMP FALSE
 #endif
 
-#define APP_LAMP_STATE_MAGIC 0x4C524C01UL /* LR + L (Lamp) + revision 1 */
+#define APP_LAMP_STATE_MAGIC 0x5A524C01UL /* ZR (Zigbee Router) + L (Lamp) + revision 1 */
 
 /* Power-on defaults: off, full level, D65 white (x=0.3127, y=0.3290) */
 #define APP_LAMP_DEFAULT_ONOFF FALSE

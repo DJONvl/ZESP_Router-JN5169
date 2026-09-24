@@ -30,7 +30,7 @@
 #define TRACE_REPORT FALSE
 #endif
 
-#define APP_REPORTS_MAGIC        0x4C525203UL /* LR + R (Reports) + revision 3 */
+#define APP_REPORTS_MAGIC        0x5A525203UL /* ZR (Zigbee Router) + R (Reports) + revision 3 */
 #define APP_REPORT_INDEX_INVALID 0xFF
 
 #define LAMP_MIN_REPORT_INTERVAL_SECONDS 1

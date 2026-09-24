@@ -35,7 +35,7 @@
 #define TRACE_APP FALSE
 #endif
 
-#define APP_NODE_STATE_MAGIC 0x4C524E01UL /* LR + N (NodeState) + revision 1 */
+#define APP_NODE_STATE_MAGIC 0x5A524E01UL /* ZR (Zigbee Router) + N (NodeState) + revision 1 */
 
 #define JOIN_RETRY_TIME   ZTIMER_TIME_SEC(15)
 #define REJOIN_RETRY_TIME ZTIMER_TIME_SEC(60)

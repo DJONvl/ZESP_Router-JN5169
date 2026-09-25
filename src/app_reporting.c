@@ -30,7 +30,7 @@
 #define TRACE_REPORT FALSE
 #endif
 
-#define APP_REPORTS_MAGIC        0x5A525203UL /* ZR (Zigbee Router) + R (Reports) + revision 3 */
+#define APP_REPORTS_MAGIC        0x5A525204UL /* ZR (Zigbee Router) + R (Reports) + revision 4 */
 #define APP_REPORT_INDEX_INVALID 0xFF
 
 #define LAMP_MIN_REPORT_INTERVAL_SECONDS 1
@@ -104,6 +104,19 @@ PRIVATE APP_tsReports asDefaultReports[NUMBER_OF_REPORTS] = {
             0,
             E_ZCL_UINT16,
             E_CLD_COLOURCONTROL_ATTR_CURRENT_Y,
+            LAMP_MIN_REPORT_INTERVAL_SECONDS,
+            LAMP_MAX_REPORT_INTERVAL_SECONDS,
+            0,
+            {.zuint16ReportableChange = LAMP_COLOUR_MINIMUM_REPORTABLE_CHANGE},
+        },
+    },
+    {
+        LUMIROUTER_APPLICATION_ENDPOINT,
+        LIGHTING_CLUSTER_ID_COLOUR_CONTROL,
+        {
+            0,
+            E_ZCL_UINT16,
+            E_CLD_COLOURCONTROL_ATTR_COLOUR_TEMPERATURE_MIRED,
             LAMP_MIN_REPORT_INTERVAL_SECONDS,
             LAMP_MAX_REPORT_INTERVAL_SECONDS,
             0,
@@ -299,6 +312,11 @@ PRIVATE uint8 APP_u8GetRecordIndex(uint16 u16ClusterID, uint16 u16AttributeEnum)
     if ((u16ClusterID == LIGHTING_CLUSTER_ID_COLOUR_CONTROL) &&
         (u16AttributeEnum == E_CLD_COLOURCONTROL_ATTR_CURRENT_Y)) {
         return REPORT_LAMP_CURRENT_Y_SLOT;
+    }
+
+    if ((u16ClusterID == LIGHTING_CLUSTER_ID_COLOUR_CONTROL) &&
+        (u16AttributeEnum == E_CLD_COLOURCONTROL_ATTR_COLOUR_TEMPERATURE_MIRED)) {
+        return REPORT_LAMP_COLOUR_TEMP_SLOT;
     }
 
     return APP_REPORT_INDEX_INVALID;

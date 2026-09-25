@@ -22,13 +22,15 @@
 #define TRACE_LAMP FALSE
 #endif
 
-#define APP_LAMP_STATE_MAGIC 0x5A524C01UL /* ZR (Zigbee Router) + L (Lamp) + revision 1 */
+#define APP_LAMP_STATE_MAGIC 0x5A524C02UL /* ZR (Zigbee Router) + L (Lamp) + revision 2 */
 
 /* Power-on defaults: off, full level, D65 white (x=0.3127, y=0.3290) */
 #define APP_LAMP_DEFAULT_ONOFF FALSE
 #define APP_LAMP_DEFAULT_LEVEL 0xFEU
 #define APP_LAMP_DEFAULT_X     20413U /* 0.3127 * 65279 */
 #define APP_LAMP_DEFAULT_Y     21477U /* 0.3290 * 65279 */
+#define APP_LAMP_DEFAULT_CT    APP_LAMP_CT_DEFAULT
+#define APP_LAMP_DEFAULT_MODE  1U /* XY */
 
 /* ZCL CIE xy range is 0x0000-0xFEFF */
 #define APP_LAMP_XY_MAX 65279U
@@ -39,12 +41,15 @@ typedef struct {
     uint8 u8Level;
     uint16 u16X;
     uint16 u16Y;
+    uint16 u16ColourTemp;
+    uint8 u8ColourMode;
 } APP_tsLampStateRecord;
 
 PRIVATE APP_tsLampState sState;
 
 PRIVATE void APP_LAMP_vSaveState(void);
 PRIVATE void APP_LAMP_vSendSnapshot(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint16 u16X, uint16 u16Y);
+PRIVATE void APP_LAMP_vSendSnapshotRgb(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint8 u8R, uint8 u8G, uint8 u8B);
 PRIVATE void APP_LAMP_vReadAttributes(bool_t *pbOnOff, uint8 *pu8Level, uint16 *pu16X, uint16 *pu16Y);
 PRIVATE const char *APP_LAMP_pcCommandName(uint8 u8Command);
 PRIVATE uint8 APP_LAMP_u8AppendText(const char *pcText, char *pcOut);
@@ -74,6 +79,8 @@ PUBLIC void APP_LAMP_vInit(void)
             sState.u8Level = sRecord.u8Level;
             sState.u16X = sRecord.u16X;
             sState.u16Y = sRecord.u16Y;
+            sState.u16ColourTemp = sRecord.u16ColourTemp;
+            sState.u8ColourMode = sRecord.u8ColourMode;
             bRestored = TRUE;
         }
     }
@@ -84,8 +91,16 @@ PUBLIC void APP_LAMP_vInit(void)
         sState.u8Level = APP_LAMP_DEFAULT_LEVEL;
         sState.u16X = APP_LAMP_DEFAULT_X;
         sState.u16Y = APP_LAMP_DEFAULT_Y;
+        sState.u16ColourTemp = APP_LAMP_DEFAULT_CT;
+        sState.u8ColourMode = APP_LAMP_DEFAULT_MODE;
         APP_LAMP_vSaveState();
     }
+
+    /* Static colour capabilities of the emulated lamp. */
+    sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMiredPhyMin = APP_LAMP_CT_MIN;
+    sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMiredPhyMax = APP_LAMP_CT_MAX;
+    sLumiRouter.sColourControlServerCluster.u16CoupleColourTempToLevelMinMired = APP_LAMP_CT_MIN;
+    sLumiRouter.sColourControlServerCluster.u16StartupColourTemperatureMired = 0xFFFFU;
 
     APP_LAMP_vApplyToAttributes();
 }
@@ -99,6 +114,8 @@ PUBLIC void APP_LAMP_vFactoryReset(void)
     sState.u8Level = APP_LAMP_DEFAULT_LEVEL;
     sState.u16X = APP_LAMP_DEFAULT_X;
     sState.u16Y = APP_LAMP_DEFAULT_Y;
+    sState.u16ColourTemp = APP_LAMP_DEFAULT_CT;
+    sState.u8ColourMode = APP_LAMP_DEFAULT_MODE;
 
     APP_LAMP_vSaveState();
     APP_LAMP_vApplyToAttributes();
@@ -113,6 +130,8 @@ PUBLIC void APP_LAMP_vApplyToAttributes(void)
     sLumiRouter.sLevelControlServerCluster.u8CurrentLevel = sState.u8Level;
     sLumiRouter.sColourControlServerCluster.u16CurrentX = sState.u16X;
     sLumiRouter.sColourControlServerCluster.u16CurrentY = sState.u16Y;
+    sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMired = sState.u16ColourTemp;
+    sLumiRouter.sColourControlServerCluster.u8ColourMode = sState.u8ColourMode;
 }
 
 /**
@@ -218,11 +237,14 @@ PUBLIC void APP_LAMP_vColourXyCommand(uint16 u16X, uint16 u16Y)
 {
     sState.u16X = u16X;
     sState.u16Y = u16Y;
+    sState.u8ColourMode =
+        (uint8)E_CLD_COLOURCONTROL_COLOURMODE_CURRENT_X_AND_CURRENT_Y;
 
     /* Short-circuit the transition (see APP_LAMP_vLevelCommand) and
      * neutralise the colour engine, it also ramps from stale state. */
     sLumiRouter.sColourControlServerCluster.u16CurrentX = u16X;
     sLumiRouter.sColourControlServerCluster.u16CurrentY = u16Y;
+    sLumiRouter.sColourControlServerCluster.u8ColourMode = sState.u8ColourMode;
     sLumiRouter.sColourControlServerCustomDataStructure.sTransition.eCommand =
         E_CLD_COLOURCONTROL_CMD_NONE;
 
@@ -243,9 +265,12 @@ PUBLIC void APP_LAMP_vColourHsCommand(uint8 u8Hue, uint8 u8Saturation)
 
     APP_LAMP_vHsToRgb(u8Hue, u8Saturation, &u8R, &u8G, &u8B);
     APP_LAMP_vRgbToXy(u8R, u8G, u8B, &sState.u16X, &sState.u16Y);
+    sState.u8ColourMode =
+        (uint8)E_CLD_COLOURCONTROL_COLOURMODE_CURRENT_HUE_AND_CURRENT_SATURATION;
 
     sLumiRouter.sColourControlServerCluster.u16CurrentX = sState.u16X;
     sLumiRouter.sColourControlServerCluster.u16CurrentY = sState.u16Y;
+    sLumiRouter.sColourControlServerCluster.u8ColourMode = sState.u8ColourMode;
     sLumiRouter.sColourControlServerCustomDataStructure.sTransition.eCommand =
         E_CLD_COLOURCONTROL_CMD_NONE;
 
@@ -257,7 +282,49 @@ PUBLIC void APP_LAMP_vColourHsCommand(uint8 u8Hue, uint8 u8Saturation)
                 sState.u16Y);
 
     APP_LAMP_vSaveState();
-    APP_LAMP_vSendSnapshot(LAMP_CMD_SET_COLOUR_HS, sState.bOnOff, sState.u8Level, sState.u16X, sState.u16Y);
+    APP_LAMP_vSendSnapshotRgb(LAMP_CMD_SET_COLOUR_HS, sState.bOnOff, sState.u8Level, u8R, u8G, u8B);
+}
+
+/**
+ * @brief Handles a MoveToColourTemperature command from the Zigbee network
+ * @details The emulated lamp has no white channel: mireds are converted
+ * to RGB for the host, and to CIE XY for the ZCL attributes.
+ */
+PUBLIC void APP_LAMP_vColourCtCommand(uint16 u16Mireds)
+{
+    uint8 u8R;
+    uint8 u8G;
+    uint8 u8B;
+
+    if (u16Mireds < APP_LAMP_CT_MIN) {
+        u16Mireds = APP_LAMP_CT_MIN;
+    }
+    else if (u16Mireds > APP_LAMP_CT_MAX) {
+        u16Mireds = APP_LAMP_CT_MAX;
+    }
+
+    sState.u16ColourTemp = u16Mireds;
+    sState.u8ColourMode = (uint8)E_CLD_COLOURCONTROL_COLOURMODE_COLOUR_TEMPERATURE;
+
+    APP_LAMP_vCtToRgb(u16Mireds, &u8R, &u8G, &u8B);
+    APP_LAMP_vRgbToXy(u8R, u8G, u8B, &sState.u16X, &sState.u16Y);
+
+    sLumiRouter.sColourControlServerCluster.u16CurrentX = sState.u16X;
+    sLumiRouter.sColourControlServerCluster.u16CurrentY = sState.u16Y;
+    sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMired = u16Mireds;
+    sLumiRouter.sColourControlServerCluster.u8ColourMode = sState.u8ColourMode;
+    sLumiRouter.sColourControlServerCustomDataStructure.sTransition.eCommand =
+        E_CLD_COLOURCONTROL_CMD_NONE;
+
+    DBG_vPrintf(TRACE_LAMP,
+                "Lamp: MoveToColourTemperature mireds=%u -> rgb=(%d,%d,%d)\n",
+                u16Mireds,
+                u8R,
+                u8G,
+                u8B);
+
+    APP_LAMP_vSaveState();
+    APP_LAMP_vSendSnapshotRgb(LAMP_CMD_SET_COLOUR_CT, sState.bOnOff, sState.u8Level, u8R, u8G, u8B);
 }
 
 /**
@@ -277,6 +344,8 @@ PUBLIC void APP_LAMP_vTransitionUpdate(void)
     sState.u8Level = u8Level;
     sState.u16X = u16X;
     sState.u16Y = u16Y;
+    sState.u16ColourTemp = sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMired;
+    sState.u8ColourMode = sLumiRouter.sColourControlServerCluster.u8ColourMode;
 
     APP_LAMP_vSendSnapshot(LAMP_CMD_CLUSTER_UPDATE, bOnOff, u8Level, u16X, u16Y);
 }
@@ -297,6 +366,8 @@ PUBLIC void APP_LAMP_vAttributeWritten(void)
     sState.u8Level = u8Level;
     sState.u16X = u16X;
     sState.u16Y = u16Y;
+    sState.u16ColourTemp = sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMired;
+    sState.u8ColourMode = sLumiRouter.sColourControlServerCluster.u8ColourMode;
 
     DBG_vPrintf(TRACE_LAMP, "Lamp: Attributes written on=%d level=%d x=%u y=%u\n", bOnOff, u8Level, u16X, u16Y);
 
@@ -315,6 +386,8 @@ PUBLIC void APP_LAMP_vSendStateToHost(uint8 u8Command)
     uint16 u16Y;
 
     APP_LAMP_vReadAttributes(&bOnOff, &u8Level, &u16X, &u16Y);
+    sState.u16ColourTemp = sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMired;
+    sState.u8ColourMode = sLumiRouter.sColourControlServerCluster.u8ColourMode;
     APP_LAMP_vSendSnapshot(u8Command, bOnOff, u8Level, u16X, u16Y);
 }
 
@@ -339,12 +412,34 @@ PUBLIC void APP_LAMP_vHandleHostJson(const APP_tsHostJson *psHost)
         APP_LAMP_vRgbToXy(psHost->u8R, psHost->u8G, psHost->u8B, &sState.u16X, &sState.u16Y);
     }
 
+    if (psHost->bHasCt) {
+        uint8 u8R;
+        uint8 u8G;
+        uint8 u8B;
+        uint16 u16Ct = psHost->u16Ct;
+
+        if (u16Ct < APP_LAMP_CT_MIN) {
+            u16Ct = APP_LAMP_CT_MIN;
+        }
+        else if (u16Ct > APP_LAMP_CT_MAX) {
+            u16Ct = APP_LAMP_CT_MAX;
+        }
+
+        /* A host white point also drives XY so both stay consistent. */
+        APP_LAMP_vCtToRgb(u16Ct, &u8R, &u8G, &u8B);
+        APP_LAMP_vRgbToXy(u8R, u8G, u8B, &sState.u16X, &sState.u16Y);
+
+        sState.u16ColourTemp = u16Ct;
+        sState.u8ColourMode = (uint8)E_CLD_COLOURCONTROL_COLOURMODE_COLOUR_TEMPERATURE;
+    }
+
     DBG_vPrintf(TRACE_LAMP,
-                "Lamp: Host json on=%d level=%d x=%u y=%u\n",
+                "Lamp: Host json on=%d level=%d x=%u y=%u ct=%u\n",
                 sState.bOnOff,
                 sState.u8Level,
                 sState.u16X,
-                sState.u16Y);
+                sState.u16Y,
+                sState.u16ColourTemp);
 
     APP_LAMP_vApplyToAttributes();
     APP_LAMP_vSaveState();
@@ -546,6 +641,75 @@ PUBLIC void APP_LAMP_vHsToRgb(uint8 u8Hue, uint8 u8Sat, uint8 *pu8R, uint8 *pu8G
 }
 
 /**
+ * @brief Converts colour temperature (mireds) to sRGB (0-255)
+ * @details Tanner Helland approximation of the blackbody locus.
+ * Used to emulate a white channel on the RGB-only host lamp.
+ */
+PUBLIC void APP_LAMP_vCtToRgb(uint16 u16Mireds, uint8 *pu8R, uint8 *pu8G, uint8 *pu8B)
+{
+    float fTemp;
+    float fR;
+    float fG;
+    float fB;
+
+    if (u16Mireds == 0U) {
+        u16Mireds = APP_LAMP_CT_MIN;
+    }
+
+    /* Mireds to Kelvin, scaled to the approximation range. */
+    fTemp = 1000000.0f / (float)u16Mireds / 100.0f;
+
+    if (fTemp <= 66.0f) {
+        fR = 255.0f;
+    }
+    else {
+        fR = 329.698727446f * powf(fTemp - 60.0f, -0.1332047592f);
+    }
+
+    if (fTemp <= 66.0f) {
+        fG = 99.4708025861f * logf(fTemp) - 161.1195681661f;
+    }
+    else {
+        fG = 288.1221695283f * powf(fTemp - 60.0f, -0.0755148492f);
+    }
+
+    if (fTemp >= 66.0f) {
+        fB = 255.0f;
+    }
+    else if (fTemp <= 19.0f) {
+        fB = 0.0f;
+    }
+    else {
+        fB = 138.5177312231f * logf(fTemp - 10.0f) - 305.0447927307f;
+    }
+
+    if (fR < 0.0f) {
+        fR = 0.0f;
+    }
+    else if (fR > 255.0f) {
+        fR = 255.0f;
+    }
+
+    if (fG < 0.0f) {
+        fG = 0.0f;
+    }
+    else if (fG > 255.0f) {
+        fG = 255.0f;
+    }
+
+    if (fB < 0.0f) {
+        fB = 0.0f;
+    }
+    else if (fB > 255.0f) {
+        fB = 255.0f;
+    }
+
+    *pu8R = (uint8)fR;
+    *pu8G = (uint8)fG;
+    *pu8B = (uint8)fB;
+}
+
+/**
  * @brief Persists the RAM mirror state to PDM
  */
 PRIVATE void APP_LAMP_vSaveState(void)
@@ -557,6 +721,8 @@ PRIVATE void APP_LAMP_vSaveState(void)
     sRecord.u8Level = sState.u8Level;
     sRecord.u16X = sState.u16X;
     sRecord.u16Y = sState.u16Y;
+    sRecord.u16ColourTemp = sState.u16ColourTemp;
+    sRecord.u8ColourMode = sState.u8ColourMode;
 
     if (PDM_eSaveRecordData(PDM_ID_APP_LAMP_STATE, &sRecord, sizeof(sRecord)) != PDM_E_STATUS_OK) {
         DBG_vPrintf(TRACE_LAMP, "Lamp: Failed to save state\n");
@@ -578,26 +744,46 @@ APP_LAMP_vSendSnapshot(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint16 u16
     uint8 u8R;
     uint8 u8G;
     uint8 u8B;
+
+    /* Snapshots carry explicit RGB: a double XY round-trip distorts
+     * saturated colours (matrices + quantisation), so callers that
+     * already hold RGB pass it straight through. */
+    APP_LAMP_vXyToRgb(u16X, u16Y, &u8R, &u8G, &u8B);
+    APP_LAMP_vSendSnapshotRgb(u8Command, bOnOff, u8Level, u8R, u8G, u8B);
+}
+
+/**
+ * @brief Builds a state JSON line from explicit RGB and sends it
+ * @details Consecutive duplicates (same state, any command) are dropped;
+ * seq advances only on actual sends.
+ */
+PRIVATE void
+APP_LAMP_vSendSnapshotRgb(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint8 u8R, uint8 u8G, uint8 u8B)
+{
     char acLine[128];
     uint8 u8Length = 0U;
 
     static bool_t bLastOnOff = FALSE;
     static uint8 u8LastLevel = 0xFFU;
-    static uint16 u16LastX = 0xFFFFU;
-    static uint16 u16LastY = 0xFFFFU;
+    static uint8 u8LastR = 0xFFU;
+    static uint8 u8LastG = 0xFFU;
+    static uint8 u8LastB = 0xFFU;
+    static uint16 u16LastCt = 0xFFFFU;
+    static uint8 u8LastMode = 0xFFU;
 
     if ((bOnOff == bLastOnOff) && (u8Level == u8LastLevel) &&
-        (u16X == u16LastX) && (u16Y == u16LastY)) {
+        (u8R == u8LastR) && (u8G == u8LastG) && (u8B == u8LastB) &&
+        (sState.u16ColourTemp == u16LastCt) && (sState.u8ColourMode == u8LastMode)) {
         return;
     }
 
     bLastOnOff = bOnOff;
-    bLastOnOff = bOnOff;
     u8LastLevel = u8Level;
-    u16LastX = u16X;
-    u16LastY = u16Y;
-
-    APP_LAMP_vXyToRgb(u16X, u16Y, &u8R, &u8G, &u8B);
+    u8LastR = u8R;
+    u8LastG = u8G;
+    u8LastB = u8B;
+    u16LastCt = sState.u16ColourTemp;
+    u8LastMode = sState.u8ColourMode;
 
     DBG_vPrintf(TRACE_LAMP,
                 "Lamp: TX cmd=%s on=%d level=%d rgb=(%d,%d,%d)\n",
@@ -620,6 +806,8 @@ APP_LAMP_vSendSnapshot(uint8 u8Command, bool_t bOnOff, uint8 u8Level, uint16 u16
     u8Length += APP_LAMP_u8AppendDec(u8G, &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendText(",\"b\":", &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendDec(u8B, &acLine[u8Length]);
+    u8Length += APP_LAMP_u8AppendText(",\"ct\":", &acLine[u8Length]);
+    u8Length += APP_LAMP_u8AppendDec32(sState.u16ColourTemp, &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendText(",\"seq\":", &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendDec32(APP_u32NextSeq(), &acLine[u8Length]);
     u8Length += APP_LAMP_u8AppendText("}", &acLine[u8Length]);
@@ -651,6 +839,9 @@ PRIVATE const char *APP_LAMP_pcCommandName(uint8 u8Command)
 
     case LAMP_CMD_SET_COLOUR_HS:
         return "color_hs";
+
+    case LAMP_CMD_SET_COLOUR_CT:
+        return "color_ct";
 
     case LAMP_CMD_MOVE_STEP_STOP:
         return "move";

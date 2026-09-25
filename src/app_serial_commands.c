@@ -168,7 +168,7 @@ PRIVATE void APP_vProcessJsonChar(uint8 u8Char)
 
 /**
  * @brief Dispatch a complete JSON line from the host
- * @details Recognised keys: onoff, level, r, g, b (lamp, EP1);
+ * @details Recognised keys: onoff, level, r, g, b, ct (lamp, EP1);
  * lux (sensor, EP2); play, volume, melody (doorbell, EP3);
  * reset, erase_pdm (actions). Device groups are independent and may
  * be combined in one line. Unknown keys and malformed lines are ignored.
@@ -228,6 +228,11 @@ PRIVATE void APP_vProcessJsonLine(const char *pcLine)
         }
     }
 
+    if (APP_bGetJsonInt(pcLine, "ct", &u16Value)) {
+        sHost.bHasCt = TRUE;
+        sHost.u16Ct = u16Value;
+    }
+
     if (APP_bGetJsonInt(pcLine, "lux", &u16Value)) {
         sHost.bHasLux = TRUE;
         sHost.u16Lux = u16Value;
@@ -248,7 +253,7 @@ PRIVATE void APP_vProcessJsonLine(const char *pcLine)
         sHost.u16Melody = u16Value;
     }
 
-    if (sHost.bHasOnOff || sHost.bHasLevel || sHost.bHasRgb) {
+    if (sHost.bHasOnOff || sHost.bHasLevel || sHost.bHasRgb || sHost.bHasCt) {
         APP_LAMP_vHandleHostJson(&sHost);
     }
 
@@ -302,7 +307,7 @@ PRIVATE void APP_vSendIeeeLine(void)
 /**
  * @brief Replies with the full live state of all virtual devices
  * @details Read-only: attributes are never modified. Line format:
- * {"cmd":"state","onoff":1,"level":56,"r":255,"g":0,"b":0,
+ * {"cmd":"state","onoff":1,"level":56,"r":255,"g":0,"b":0,"ct":370,
  *  "play":0,"volume":132,"melody":3,"lux":12500}
  */
 PRIVATE void APP_vSendFullState(void)
@@ -329,6 +334,9 @@ PRIVATE void APP_vSendFullState(void)
     u8Length += APP_vAppendDec(u8G, &acLine[u8Length]);
     u8Length += APP_vAppendText(",\"b\":", &acLine[u8Length]);
     u8Length += APP_vAppendDec(u8B, &acLine[u8Length]);
+    u8Length += APP_vAppendText(",\"ct\":", &acLine[u8Length]);
+    u8Length += APP_vAppendDec16(sLumiRouter.sColourControlServerCluster.u16ColourTemperatureMired,
+                                 &acLine[u8Length]);
     u8Length += APP_vAppendText(",\"play\":", &acLine[u8Length]);
     u8Length += APP_vAppendDec(sDoorbell.sOnOffServerCluster.bOnOff ? 1U : 0U, &acLine[u8Length]);
     u8Length += APP_vAppendText(",\"volume\":", &acLine[u8Length]);

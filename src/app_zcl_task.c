@@ -363,6 +363,11 @@ PRIVATE void APP_ZCL_vHandleLampCustomCommands(tsZCL_CallBackEvent *psEvent)
                 psMessage->uMessage.psMoveToHueAndSaturationCommandPayload->u8Saturation);
             break;
 
+        case E_CLD_COLOURCONTROL_CMD_MOVE_TO_COLOUR_TEMPERATURE:
+            APP_LAMP_vColourCtCommand(
+                psMessage->uMessage.psMoveToColourTemperatureCommandPayload->u16ColourTemperatureMired);
+            break;
+
         default:
             APP_LAMP_vSendStateToHost(LAMP_CMD_MOVE_STEP_STOP);
             break;

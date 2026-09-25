@@ -19,6 +19,8 @@ typedef struct {
     uint8 u8R;
     uint8 u8G;
     uint8 u8B;
+    bool_t bHasCt;
+    uint16 u16Ct;
 
     /* Sensor (EP2) */
     bool_t bHasLux;
